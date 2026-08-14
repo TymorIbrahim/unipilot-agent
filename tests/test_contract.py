@@ -112,3 +112,12 @@ def test_submission_ready_only_when_chat_runs_on_llmod(
 
     assert settings.chat_provider() == expected
     assert settings.submission_ready() is ready
+
+
+def test_credentials_never_appear_in_a_settings_repr() -> None:
+    """A pydantic model prints its fields, so a failing assertion, a logged
+    settings object, or a Vercel stack trace would otherwise carry live keys."""
+    rendered = repr(Settings(llm_api_key="sk-secret", pinecone_api_key="pc-secret"))
+
+    assert "sk-secret" not in rendered
+    assert "pc-secret" not in rendered

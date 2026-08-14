@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The spec's hard ceiling: Vercel kills any function call at 300s. We finish
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     # Defaults are the SUBMISSION values. Development overrides them to OpenAI
     # directly, on the same model, so iteration does not consume the $13 course
     # budget -- see `.env`. `chat_provider` reports which is live.
-    llm_api_key: str = ""
+    llm_api_key: str = Field(default="", repr=False)
     llm_base_url: str = "https://api.llmod.ai/v1"
     llm_chat_model: str = "MB5R2CF-azure/gpt-5.4-mini"
 
@@ -40,7 +41,7 @@ class Settings(BaseSettings):
     # a different one would silently mismatch every stored vector -- queries
     # would still return results, just meaningless ones. This must not follow
     # the chat provider when chat is swapped for development.
-    llm_embedding_api_key: str = ""
+    llm_embedding_api_key: str = Field(default="", repr=False)
     llm_embedding_base_url: str = "https://api.llmod.ai/v1"
     llm_embedding_model: str = "MB5R2CF-azure/text-embedding-3-small"
 
@@ -55,10 +56,10 @@ class Settings(BaseSettings):
     # connection per invocation; direct connections exhaust Postgres' limit
     # under even light concurrency.
     supabase_url: str = ""
-    supabase_key: str = ""
+    supabase_key: str = Field(default="", repr=False)
 
     # --- Pinecone (vector database) ----------------------------------------
-    pinecone_api_key: str = ""
+    pinecone_api_key: str = Field(default="", repr=False)
     pinecone_index_name: str = "unipilot-wiki"
 
     # --- Budgets ------------------------------------------------------------
