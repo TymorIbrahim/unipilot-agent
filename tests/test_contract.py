@@ -28,8 +28,17 @@ def test_team_info_has_the_required_fields(client: TestClient) -> None:
 
     assert set(body) == {"group_batch_order_number", "team_name", "students"}
     assert body["group_batch_order_number"] == "3_3"
-    assert len(body["students"]) == 3
+    assert body["team_name"] == "UniPilot"
     assert all({"name", "email"} == set(student) for student in body["students"])
+
+
+def test_team_info_lists_every_member_with_a_real_address(client: TestClient) -> None:
+    """Placeholders here ship straight into the graded identity endpoint."""
+    students = client.get("/api/team_info").json()["students"]
+
+    assert len(students) == 2
+    assert all("@" in student["email"] and "TODO" not in student["email"] for student in students)
+    assert all(student["name"] and "TODO" not in student["name"] for student in students)
 
 
 def test_agent_info_has_the_required_fields(client: TestClient) -> None:
