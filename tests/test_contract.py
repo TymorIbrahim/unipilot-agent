@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import Settings
 from app.main import app
 from app.tracing.modules import MODULE_NAMES
 
@@ -85,4 +86,29 @@ def test_execute_accepts_a_bare_prompt_without_a_student(client: TestClient) -> 
 def test_health_reports_configuration_readiness(client: TestClient) -> None:
     body = client.get("/api/health").json()
 
-    assert {"status", "llm", "supabase", "pinecone"} == set(body)
+    assert {
+        "status",
+        "llm",
+        "chat_provider",
+        "chat_model",
+        "submission_ready",
+        "supabase",
+        "pinecone",
+    } == set(body)
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected", "ready"),
+    [
+        ("https://api.llmod.ai/v1", "llmod", True),
+        ("https://api.openai.com/v1", "api.openai.com", False),
+    ],
+)
+def test_submission_ready_only_when_chat_runs_on_llmod(
+    base_url: str, expected: str, ready: bool
+) -> None:
+    """Guards the one misconfiguration that produces no visible symptom."""
+    settings = Settings(llm_api_key="test-key", llm_base_url=base_url)
+
+    assert settings.chat_provider() == expected
+    assert settings.submission_ready() is ready

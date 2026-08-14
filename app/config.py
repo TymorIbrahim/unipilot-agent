@@ -22,11 +22,26 @@ VERCEL_HARD_LIMIT_S = 300.0
 DEFAULT_TIME_BUDGET_S = 240.0
 
 
+LLMOD_HOST = "api.llmod.ai"
+
+
 class Settings(BaseSettings):
-    # --- LLM provider (LLMod.ai) -------------------------------------------
+    # --- Chat model ---------------------------------------------------------
+    # Defaults are the SUBMISSION values. Development overrides them to OpenAI
+    # directly, on the same model, so iteration does not consume the $13 course
+    # budget -- see `.env`. `chat_provider` reports which is live.
     llm_api_key: str = ""
     llm_base_url: str = "https://api.llmod.ai/v1"
     llm_chat_model: str = "MB5R2CF-azure/gpt-5.4-mini"
+
+    # --- Embedding model ----------------------------------------------------
+    # Configured SEPARATELY from chat and pinned to LLMod on purpose: the
+    # Pinecone index was built with this exact model, so pointing embeddings at
+    # a different one would silently mismatch every stored vector -- queries
+    # would still return results, just meaningless ones. This must not follow
+    # the chat provider when chat is swapped for development.
+    llm_embedding_api_key: str = ""
+    llm_embedding_base_url: str = "https://api.llmod.ai/v1"
     llm_embedding_model: str = "MB5R2CF-azure/text-embedding-3-small"
 
     # Reasoning is the point of this agent, so thinking is on by default; the
@@ -54,6 +69,25 @@ class Settings(BaseSettings):
 
     def llm_configured(self) -> bool:
         return bool(self.llm_api_key.strip())
+
+    def chat_provider(self) -> str:
+        """Which provider the CHAT model is actually pointed at right now.
+
+        Surfaced through `/api/health` because the dev/submission swap is a
+        credential change with no visible symptom: the agent answers just as
+        well on either provider, so a run against the wrong one looks entirely
+        healthy and would only be caught by whoever reads the billing. Naming
+        the live provider makes the mistake visible before submission instead
+        of after grading.
+        """
+        host = self.llm_base_url.split("//")[-1].split("/")[0].lower()
+        if host == LLMOD_HOST:
+            return "llmod"
+        return host or "unknown"
+
+    def submission_ready(self) -> bool:
+        """True only when the graded configuration is the live one."""
+        return self.chat_provider() == "llmod" and self.llm_configured()
 
     def supabase_configured(self) -> bool:
         return bool(self.supabase_url.strip() and self.supabase_key.strip())

@@ -148,6 +148,11 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "llm": settings.llm_configured(),
+            "chat_provider": settings.chat_provider(),
+            "chat_model": settings.llm_chat_model,
+            # The one check that catches a submission still pointed at the
+            # development provider -- a mistake with no other symptom.
+            "submission_ready": settings.submission_ready(),
             "supabase": settings.supabase_configured(),
             "pinecone": settings.pinecone_configured(),
         }
