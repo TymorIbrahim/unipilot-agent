@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UniPilot Agent</title>
+<style>
+  :root {
+    --bg: #f7f7f8; --panel: #ffffff; --ink: #1c1c1f; --muted: #6b6b76;
+    --line: #e3e3e8; --accent: #2f5bd8; --accent-ink: #ffffff;
+    --ok: #12794f; --err: #b3261e; --code-bg: #f2f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a; --panel: #1e1e24; --ink: #ececf1; --muted: #9a9aa6;
+      --line: #32323c; --accent: #6a8dff; --accent-ink: #10101a;
+      --ok: #4ade80; --err: #ff8a80; --code-bg: #26262e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { margin-bottom: 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  textarea, select {
+    width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  .row { display: flex; gap: 12px; align-items: flex-end; margin-top: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 220px; }
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 8px; padding: 11px 20px;
+  }
+  button[disabled] { opacity: .55; cursor: progress; }
+  .status { font-size: 13px; color: var(--muted); margin-left: 4px; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .answer { white-space: pre-wrap; }
+  .empty { color: var(--muted); font-style: italic; }
+  details {
+    border: 1px solid var(--line); border-radius: 8px;
+    margin-bottom: 8px; background: var(--bg);
+  }
+  summary { cursor: pointer; padding: 9px 12px; font-weight: 600; font-size: 14px; }
+  .step-body { padding: 0 12px 12px; }
+  .step-body h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 12px 0 4px;
+  }
+  pre {
+    background: var(--code-bg); border-radius: 6px; padding: 10px;
+    overflow-x: auto; margin: 0; font-size: 12.5px;
+    white-space: pre-wrap; word-break: break-word; max-height: 340px;
+  }
+  .pill {
+    display: inline-block; background: var(--code-bg); color: var(--muted);
+    border-radius: 999px; padding: 1px 9px; font-size: 12px; margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>UniPilot Agent</h1>
+    <div class="sub">A grounded academic advisor. Every number in an answer is derived from a fact — never estimated.</div>
+  </header>
+
+  <div class="panel">
+    <label for="prompt">Prompt</label>
+    <textarea id="prompt" placeholder="e.g. Which courses should I take next semester, and how many credits do I still need?"></textarea>
+    <div class="row">
+      <div>
+        <label for="student">Student</label>
+        <select id="student"></select>
+      </div>
+      <div style="flex:0 0 auto">
+        <button id="run">Run Agent</button>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Response</h2>
+    <div id="answer" class="answer empty">Nothing yet — run the agent.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Steps <span class="pill" id="stepcount">0 LLM calls</span></h2>
+    <div id="steps" class="empty">No trace yet.</div>
+  </div>
+</div>
+
+<script>
+const STUDENTS = [
+  { id: "6a578a2da43a2cfe1bcc791c", label: "Information Systems Eng. — 44 courses done (senior)" },
+  { id: "6a5cc147ff67a48db62d884b", label: "Information Systems Eng. — 17 courses done" },
+  { id: "6a557a040edefb30367854ce", label: "Computer Science (4-year) — 11 courses done" },
+  { id: "6a5688319341471497d58c59", label: "Data & Information Eng. — 5 courses done" },
+];
+
+const $ = (id) => document.getElementById(id);
+const selectEl = $("student");
+for (const s of STUDENTS) {
+  const opt = document.createElement("option");
+  opt.value = s.id; opt.textContent = s.label;
+  selectEl.appendChild(opt);
+}
+
+function renderSteps(steps) {
+  const host = $("steps");
+  host.innerHTML = "";
+  $("stepcount").textContent = `${steps.length} LLM call${steps.length === 1 ? "" : "s"}`;
+  if (!steps.length) {
+    host.className = "empty";
+    host.textContent = "No LLM calls were made.";
+    return;
+  }
+  host.className = "";
+  steps.forEach((step, i) => {
+    const d = document.createElement("details");
+    const sum = document.createElement("summary");
+    sum.textContent = `${i + 1}. ${step.module ?? "(unnamed module)"}`;
+    d.appendChild(sum);
+
+    const body = document.createElement("div");
+    body.className = "step-body";
+    const parts = [
+      ["System prompt", step.prompt?.System_prompt],
+      ["User prompt", step.prompt?.User_prompt],
+      ["Response", step.response],
+    ];
+    for (const [heading, value] of parts) {
+      if (value === undefined || value === null || value === "") continue;
+      const h = document.createElement("h3");
+      h.textContent = heading;
+      const pre = document.createElement("pre");
+      pre.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      body.appendChild(h); body.appendChild(pre);
+    }
+    d.appendChild(body);
+    host.appendChild(d);
+  });
+}
+
+async function run() {
+  const prompt = $("prompt").value.trim();
+  if (!prompt) { $("prompt").focus(); return; }
+
+  const btn = $("run"), status = $("status"), answer = $("answer");
+  btn.disabled = true;
+  status.className = "status";
+  const started = Date.now();
+  const tick = setInterval(() => {
+    status.textContent = `running… ${Math.round((Date.now() - started) / 1000)}s`;
+  }, 250);
+
+  try {
+    const res = await fetch("/api/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, student_id: selectEl.value }),
+    });
+    const data = await res.json();
+    const secs = Math.round((Date.now() - started) / 1000);
+
+    if (data.status === "ok") {
+      status.textContent = `done in ${secs}s`;
+      status.className = "status ok";
+      answer.className = "answer";
+      answer.textContent = data.response ?? "(empty response)";
+    } else {
+      status.textContent = `error after ${secs}s`;
+      status.className = "status err";
+      answer.className = "answer";
+      answer.textContent = data.error ?? "Unknown error.";
+    }
+    renderSteps(Array.isArray(data.steps) ? data.steps : []);
+  } catch (err) {
+    status.textContent = "request failed";
+    status.className = "status err";
+    answer.className = "answer";
+    answer.textContent = String(err);
+  } finally {
+    clearInterval(tick);
+    btn.disabled = false;
+  }
+}
+
+$("run").addEventListener("click", run);
+$("prompt").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
+});
+</script>
+</body>
+</html>
