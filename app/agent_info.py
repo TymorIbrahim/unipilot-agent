@@ -13,9 +13,17 @@ the one field a reader cannot verify without running the agent themselves.
 
 from __future__ import annotations
 
+import json
+import logging
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from app.tracing.modules import MODULES
+
+logger = logging.getLogger(__name__)
+
+EXAMPLES_PATH = Path(__file__).resolve().parent.parent / "data" / "prompt_examples.json"
 
 DESCRIPTION = (
     "A grounded academic advisor for Technion students. It answers questions about a "
@@ -56,9 +64,36 @@ PROMPT_TEMPLATE_EXAMPLE = (
     "Constraint: no more than 18 credits"
 )
 
-# Filled from real recorded runs once the reasoning core is wired and deployed.
-# Deliberately empty rather than fabricated -- see the module docstring.
-PROMPT_EXAMPLES: list[dict[str, Any]] = []
+@lru_cache(maxsize=1)
+def prompt_examples() -> list[dict[str, Any]]:
+    """Recorded runs, read from `data/prompt_examples.json`.
+
+    Built by `scripts/record_examples.py` and committed, because producing them
+    costs real model calls: regenerating on deploy would spend the course budget
+    every time the service restarted, and regenerating per REQUEST would spend it
+    per request.
+
+    An absent or unreadable file yields `[]` rather than raising. `/api/agent_info`
+    is a graded endpoint and must answer; an example set is evidence attached to
+    the answer, not the answer itself. Logged loudly, because shipping an empty
+    set is a mistake worth noticing before a grader does.
+    """
+    if not EXAMPLES_PATH.is_file():
+        logger.warning(
+            "no recorded prompt examples at %s -- /api/agent_info will report an empty set. "
+            "Run scripts/record_examples.py.",
+            EXAMPLES_PATH,
+        )
+        return []
+    try:
+        examples = json.loads(EXAMPLES_PATH.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 -- a broken file must not take the endpoint down
+        logger.exception("recorded prompt examples could not be read from %s", EXAMPLES_PATH)
+        return []
+    if not isinstance(examples, list):
+        logger.error("recorded prompt examples are not a list; ignoring %s", EXAMPLES_PATH)
+        return []
+    return examples
 
 
 def agent_info() -> dict[str, Any]:
@@ -76,7 +111,7 @@ def agent_info() -> dict[str, Any]:
             "template": PROMPT_TEMPLATE,
             "example": PROMPT_TEMPLATE_EXAMPLE,
         },
-        "prompt_examples": PROMPT_EXAMPLES,
+        "prompt_examples": prompt_examples(),
         "modules": [
             {"module": module.name, "role": module.role, "calls_llm": module.calls_llm}
             for module in MODULES
@@ -86,9 +121,10 @@ def agent_info() -> dict[str, Any]:
 
 __all__ = [
     "DESCRIPTION",
-    "PROMPT_EXAMPLES",
+    "EXAMPLES_PATH",
     "PROMPT_TEMPLATE",
     "PROMPT_TEMPLATE_EXAMPLE",
     "PURPOSE",
     "agent_info",
+    "prompt_examples",
 ]

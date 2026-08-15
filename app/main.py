@@ -29,7 +29,7 @@ from app.team import team_info
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-ARCHITECTURE_PNG = _REPO_ROOT / "public" / "assets" / "architecture.png"
+ARCHITECTURE_PNG = _REPO_ROOT / "data" / "architecture.png"
 
 router = APIRouter(prefix="/api")
 
