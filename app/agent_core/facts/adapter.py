@@ -247,10 +247,11 @@ the actual plan, and stopping before it answers nothing:
      e. answer, well organised. Open with the standing, then a :detail section per
         term headed by its credit total; each course line shows number, name,
         type, credits, min_grade (the same {needed_min} on every line -- it is the
-        grade needed in each). If any placed course's `prereqStatus` reads
-        "check_prerequisites", add one line naming those -- plan_term seated them
-        but could NOT confirm their prerequisites, so flag it rather than imply
-        they are cleared. When MAINTAINING (gpa >= T):
+        grade needed in each). If any placed course's `prereqStatus` STARTS WITH
+        "NOT met", add one line naming those -- plan_term seated them but could
+        NOT confirm their prerequisites, so flag it rather than imply they are
+        cleared. Match on that prefix, never on the whole string: the rest of it
+        is advice to the student and may be worded differently. When MAINTAINING (gpa >= T):
           "Your current GPA is {gpa}, above your target. To keep it above the floor
            across these courses you need at least {needed_min} in each. Your winter
            plan:\n\nWinter -- {winter_credits} credits\n{winter:detail}"

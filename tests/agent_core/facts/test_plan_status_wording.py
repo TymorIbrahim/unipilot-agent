@@ -59,6 +59,34 @@ class TestUnknownStatusesDegradeRatherThanVanish:
         assert _status("prereqStatus", prereqStatus="") == ""
 
 
+class TestThePromptAndTheWordingCannotDrift:
+    """They already did, once, in the direction that matters most.
+
+    The prompt told the model to flag a course whose `prereqStatus` reads
+    "check_prerequisites". Rewording the fact to "NOT met -- ..." left that
+    instruction pointing at a string that no longer exists, so the model filtered
+    for it, found none, and wrote "No prerequisite issues were flagged (0)" in a
+    plan whose own detail lines said NOT met. A contradiction in one answer, and
+    the safe-looking half was the wrong half.
+    """
+
+    def test_the_prompt_matches_what_the_fact_actually_says(self) -> None:
+        from app.agent_core.facts.adapter import SYSTEM_PROMPT
+        from app.agent_core.facts.dispatch import _READABLE_STATUS
+
+        unmet = _READABLE_STATUS["check_prerequisites"]
+        assert unmet.startswith("NOT met")
+        assert "NOT met" in SYSTEM_PROMPT, (
+            "the prompt must name the text the fact really carries, or the model "
+            "filters for a value that never appears and reports zero problems"
+        )
+
+    def test_the_prompt_no_longer_names_the_raw_enum(self) -> None:
+        from app.agent_core.facts.adapter import SYSTEM_PROMPT
+
+        assert '"check_prerequisites"' not in SYSTEM_PROMPT
+
+
 class TestThePlannerKeepsItsOwnVocabulary:
     def test_the_mapping_happens_at_the_presentation_boundary(self) -> None:
         """`prereqStatus` is the planner's internal enum and its own tests assert
