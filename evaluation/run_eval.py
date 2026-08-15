@@ -43,6 +43,12 @@ def mentions(text: str, needle: str) -> bool:
     satisfy a check for 29.5 either.
     """
     if re.fullmatch(r"-?\d+(\.\d+)?", needle):
+        # An edge id -- `00960211->00940224` -- contains a real course code, so a
+        # bare boundary check counts it as "the answer named 00940224". It did
+        # not: it named an internal key a student cannot register for. Those
+        # tokens are stripped before matching, and a post-condition refuses the
+        # answer outright.
+        text = re.sub(r"\b\d{6,8}\s*->\s*\d{6,8}\b", " ", text)
         # The trailing guard must reject a number that CONTINUES (155 does not
         # satisfy 15; 129.5 does not satisfy 29.5) without rejecting one that
         # merely ends a sentence. A blanket `(?![\d.])` scored

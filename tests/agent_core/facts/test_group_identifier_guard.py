@@ -59,3 +59,52 @@ class TestRealAnswersAreNotDisturbed:
 
     def test_a_sound_answer_verifies_clean(self) -> None:
         assert verify_answer(_answer("It requires one of 00940224, 00940226."), {}, "q") == []
+
+
+class TestEdgeIdentifiersAreCaught:
+    """`prerequisite_edges` rows are keyed `<course>-><requires>`.
+
+    A published example read "any one of the course codes in
+    00960211->00940224, 00960211->00940226" -- the right two prerequisites,
+    named as internal keys a student cannot look up. This one is worse than the
+    group labels: the real course code sits INSIDE the token, so the sentence
+    reads as specific and technical rather than broken, and a substring check
+    for the code even passes.
+    """
+
+    def test_the_published_failure_is_flagged(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_edge_identifiers
+
+        violations = check_no_edge_identifiers(
+            "any one of the course codes in 00960211->00940224, 00960211->00940226"
+        )
+        assert violations and violations[0].kind == "edge_identifier_shown"
+
+    def test_the_message_says_to_project_requires(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_edge_identifiers
+
+        violations = check_no_edge_identifiers("00960211->00940224")
+        assert "requires" in violations[0].message
+
+    def test_it_reaches_verify_answer(self) -> None:
+        violations = verify_answer(_answer("needs 00960211->00940224"), {}, "q")
+        assert violations and violations[0].kind == "edge_identifier_shown"
+
+    def test_plain_course_codes_are_untouched(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_edge_identifiers
+
+        assert not check_no_edge_identifiers("It requires one of 00940224, 00940226.")
+
+
+class TestTheScorerDoesNotCreditAnEdgeDump:
+    def test_a_code_inside_an_edge_id_does_not_count_as_naming_it(self) -> None:
+        """Otherwise the harness scores a debugging dump as a correct answer --
+        which it did, on a published example."""
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "evaluation"))
+        from run_eval import mentions
+
+        assert not mentions("one of 00960211->00940224, 00960211->00940226", "00940224")
+        assert mentions("It requires one of 00940224, 00940226.", "00940224")

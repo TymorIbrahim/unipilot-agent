@@ -33,6 +33,7 @@ from app.agent_core.facts.postconditions import (
     GradedCourse,
     Standing,
     Violation,
+    check_no_edge_identifiers,
     check_no_group_identifiers,
     check_gpa_in_range,
     check_grades_in_range,
@@ -68,6 +69,7 @@ def verify_answer(
     # Checked on EVERY answer, not just plans: a prerequisite question is not a
     # plan, and that is exactly where group labels were being shown as courses.
     violations = check_no_group_identifiers(answer.text)
+    violations += check_no_edge_identifiers(answer.text)
 
     collections = list(_plan_collections(answer, facts))
     courses = [course for _, term_courses in collections for course in term_courses]

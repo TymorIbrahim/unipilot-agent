@@ -80,6 +80,7 @@ class Violation:
 
 
 _GROUP_ID = re.compile(r"\b\d{6,8}\.\d+\b")
+_EDGE_ID = re.compile(r"\b\d{6,8}\s*->\s*\d{6,8}\b")
 
 
 def check_no_group_identifiers(text: str) -> list[Violation]:
@@ -108,6 +109,35 @@ def check_no_group_identifiers(text: str) -> list[Violation]:
                 "GROUP labels, not courses. A student cannot register for those. Project the "
                 "`requires` field of the edges and name the actual course codes, grouping them "
                 "as the choices they are."
+            ),
+        )
+    ]
+
+
+def check_no_edge_identifiers(text: str) -> list[Violation]:
+    """An EDGE id must never stand in for the course it points at.
+
+    `prerequisite_edges` rows are identified as `<course>-><requires>`. A live
+    answer read "any one of the course codes in 00960211->00940224,
+    00960211->00940226" -- the right two prerequisites, named as internal edge
+    keys a student cannot look up, let alone register for.
+
+    The prompt has warned against rendering edge rows into a sentence since
+    before today, and it still happens. It is worth catching in code because it
+    reads as PLAUSIBLE: the real course code is sitting inside the token, so the
+    sentence looks specific and technical rather than broken -- and a substring
+    check for the code even passes.
+    """
+    found = _EDGE_ID.findall(text)
+    if not found:
+        return []
+    return [
+        Violation(
+            kind="edge_identifier_shown",
+            message=(
+                f"the answer shows {', '.join(sorted(set(found))[:3])}, which are prerequisite "
+                "EDGE ids, not courses. Name the course on the RIGHT of the arrow: `project` the "
+                "edges' `requires` field and slot that, grouped as the choices they are."
             ),
         )
     ]
