@@ -237,6 +237,96 @@ class TestAFailedAttemptSatisfiesNothing:
             )
 
 
+NO_ADDITIONAL_CREDIT = {
+    # candidate -> the PASSED course that makes it worth zero additional credits
+    "01040065": "01040016",  # אלגברה 1מ2 vs אלגברה 1/מורחב, passed with a 69
+}
+"""Courses the student may not be credited for twice.
+
+Found by a human reading a real plan: a senior 129.5 credits into a 155-credit
+degree was scheduled 5 credits of 01040065 (אלגברה 1מ2). They had failed
+01040166 in 2021-1 and then passed 01040016 in 2021-2 -- the ordinary "failed
+it, retook a variant, passed" path -- and the Technion catalog says plainly that
+01040065 grants no additional credit alongside 01040016.
+
+The exclusion existed and could not fire. `build_catalog_overlap_groups` reads
+`courses.noAdditionalCreditText`, the first Supabase schema had no such column,
+and a missing field yields no groups rather than an error. Same shape as the
+`prereqStatus` defect: a rule reading a column that does not exist, degrading to
+"allow everything", with nothing anywhere reporting a problem.
+
+Asserted against the catalog text rather than a hardcoded pair, so the day the
+Technion changes the relation this test says so instead of quietly passing.
+"""
+
+
+class TestACourseWorthNoCreditIsNotScheduled:
+    async def test_the_overlap_text_is_actually_seeded(self) -> None:
+        """The column existing is not the same as the column being filled, and
+        an empty one puts the exclusion right back where it was."""
+        db = await get_database()
+        filled = await db.fetchval(
+            'select count(*) from courses where "noAdditionalCreditText" is not null '
+            "and \"noAdditionalCreditText\" <> ''"
+        )
+        assert filled > 500, (
+            f"only {filled} courses carry no-additional-credit text; the seed drops it "
+            "unless `noAdditionalCreditText` is in scripts/seed.py's `courses` column tuple"
+        )
+
+    @pytest.mark.parametrize("candidate,credited", sorted(NO_ADDITIONAL_CREDIT.items()))
+    async def test_the_catalog_still_states_the_overlap(
+        self, candidate: str, credited: str
+    ) -> None:
+        db = await get_database()
+        text = await db.fetchval(
+            'select "noAdditionalCreditText" from courses where "courseNumber" = $1', candidate
+        )
+        assert text, f"{candidate} carries no overlap text at all"
+        assert credited in text, (
+            f"the catalog no longer says {candidate} overlaps {credited} (text: {text!r})"
+        )
+
+    @pytest.mark.parametrize("candidate,credited", sorted(NO_ADDITIONAL_CREDIT.items()))
+    async def test_the_student_holds_the_credited_side(
+        self, candidate: str, credited: str
+    ) -> None:
+        """Without this the exclusion has nothing to fire against, and the test
+        below would pass for the wrong reason."""
+        db = await get_database()
+        passed = await db.fetchval(
+            'select count(*) from completed_courses cc join courses c on c."_id" = cc."courseId" '
+            'where cc."userId" = $1 and c."courseNumber" = $2 and cc."passed"',
+            DEFAULT_STUDENT_ID,
+            credited,
+        )
+        assert passed == 1, f"the student no longer holds a pass in {credited}"
+
+    @pytest.mark.parametrize("candidate,credited", sorted(NO_ADDITIONAL_CREDIT.items()))
+    async def test_it_is_refused_even_when_asked_for_directly(
+        self, candidate: str, credited: str
+    ) -> None:
+        plans = [
+            await build_term_plan(
+                user_id=DEFAULT_STUDENT_ID,
+                semester_codes=[term],
+                candidates=[{"courseNumber": candidate, "category": "mandatory"}],
+                max_credits=30.0,
+            )
+            for term in ("winter", "spring")
+        ]
+        placed = {n for plan in plans for n in _numbers(_placed(plan))}
+        assert candidate not in placed, (
+            f"{candidate} was scheduled although the student already passed {credited}, "
+            "which the catalog says grants it no additional credit"
+        )
+
+    async def test_the_whole_winter_plan_is_clean(self, winter_plan: dict) -> None:
+        placed = set(_numbers(_placed(winter_plan)))
+        overlapping = placed & set(NO_ADDITIONAL_CREDIT)
+        assert not overlapping, f"placed a course worth no additional credit: {sorted(overlapping)}"
+
+
 class TestThePlanObeysItsOwnLimits:
     async def test_the_credit_cap_holds(self, winter_plan: dict) -> None:
         for term in winter_plan.get("terms", []):

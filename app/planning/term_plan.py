@@ -119,8 +119,22 @@ def plan_terms(
             if course_id in satisfied_ids or number_key in satisfied_numbers:
                 continue  # already completed or placed in an earlier term
 
-            if _overlaps_credited(number, overlap_groups, credited_raw):
-                last_reason[number] = "No additional credit: overlaps an already-credited course"
+            clash = _overlapping_credited(number, overlap_groups, credited_raw)
+            if clash:
+                # Name the clashing course, and say which kind of clash it is.
+                # `credited_raw` grows as courses are placed, so this fires both
+                # for a course passed years ago and for one seated earlier in
+                # this very plan -- and "overlaps an already-credited course"
+                # reads as the first when it is the second, which is the
+                # difference between "you cannot take this" and "not alongside
+                # the one I just scheduled".
+                passed_already = _number_key(clash) in {
+                    _number_key(n) for n in completed_course_numbers
+                }
+                last_reason[number] = (
+                    f"No additional credit alongside {clash}, which you "
+                    + ("already passed" if passed_already else "are taking this term")
+                )
                 continue
 
             offering = _offering_for(term.offerings_by_number, number)
@@ -286,14 +300,23 @@ def _offering_for(
     return offerings.get(canonical) if canonical else None
 
 
-def _overlaps_credited(
+def _overlapping_credited(
     number: str, overlap_groups: list[set[str]], credited_raw: set[str]
-) -> bool:
-    """True when `number` shares a no-additional-credit group with a credited course."""
+) -> Union[str, None]:
+    """The credited course `number` grants no additional credit alongside, if any.
+
+    Returns the course rather than a bool so the refusal can name it. A student
+    told "no additional credit" without being told against WHAT cannot check the
+    claim, and this rule is the one that removes a course from their plan
+    outright.
+    """
     group = overlap_group_for_course(number, overlap_groups)
     if not group:
-        return False
-    return any(set(course_number_keys(credited)) & group for credited in credited_raw)
+        return None
+    for credited in sorted(credited_raw):
+        if set(course_number_keys(credited)) & group:
+            return credited
+    return None
 
 
 def _chosen_options(

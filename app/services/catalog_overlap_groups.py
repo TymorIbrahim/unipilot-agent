@@ -10,7 +10,26 @@ from app.planning.support import course_number_keys, merge_overlapping_equivalen
 
 
 def build_catalog_overlap_groups(catalog_courses: list[dict[str, Any]]) -> list[set[str]]:
-    """Build mutual-exclusion / substitution groups from noAdditionalCreditText."""
+    """One set per course that declares a no-additional-credit relation.
+
+    Deliberately NOT merged into equivalence classes. "Grants no additional
+    credit alongside" is symmetric but NOT TRANSITIVE, and merging asserts the
+    transitive closure:
+
+        00970317 (cooperative game theory) declares only 01060173
+        00960570 (game theory & economic behaviour) declares 00940204 00960575 01060173
+
+    Neither names the other. Merged on their shared mention of 01060173 they
+    become one class of five, and a student who passed 00960570 is refused
+    00970317 -- two different courses that the catalog never said conflict.
+    Measured on the demo student: merging produced 4 exclusions, of which 1 was
+    this false one.
+
+    `merge_overlapping_equivalence_groups` is right for what it was written for
+    -- the same course under different catalog codes, which IS transitive -- and
+    wrong here. Reading the relation one hop out, symmetrically, is what the
+    catalog actually states.
+    """
     groups: list[set[str]] = []
     for course in catalog_courses:
         number = course.get("courseNumber") or course.get("number")
@@ -27,7 +46,7 @@ def build_catalog_overlap_groups(catalog_courses: list[dict[str, Any]]) -> list[
         if len(members) > 1:
             groups.append(members)
 
-    return merge_overlapping_equivalence_groups(groups)
+    return groups
 
 
 def collect_overlap_partner_numbers(catalog_courses: list[dict[str, Any]]) -> set[str]:
@@ -61,13 +80,25 @@ def overlap_group_for_course(
     course_number: str | None,
     overlap_groups: list[set[str]],
 ) -> frozenset[str] | None:
+    """Every course this one directly conflicts with, in either direction.
+
+    The UNION of the groups naming it, not the first of them: the relation is
+    stated from one side only, so A's own row and every row that names A both
+    have to be read to get the symmetric closure. Taking only the first group
+    made the answer depend on catalog row order.
+
+    One hop, though -- the partners' own partners are not followed. That is the
+    difference between the symmetric relation the catalog states and the
+    transitive one that merging invents.
+    """
     if not course_number or not overlap_groups:
         return None
     keys = course_number_keys(course_number)
+    partners: set[str] = set()
     for group in overlap_groups:
         if keys & group:
-            return frozenset(group)
-    return None
+            partners |= group
+    return frozenset(partners) if partners else None
 
 
 def _completion_precedence_key(

@@ -429,8 +429,12 @@ def synthetic_plan_for(profile: Mapping[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 COLUMNS: dict[str, tuple[str, ...]] = {
+    # `noAdditionalCreditText` feeds the planner's only hard exclusion. Dropping
+    # it from this tuple does not fail anything: the column just stays null, no
+    # overlap group is ever built, and the planner recommends courses worth zero
+    # credits to the student. See the note in db/schema.sql.
     "courses": ("_id", "courseNumber", "title", "titleHebrew", "credits", "faculty",
-                "studyFramework", "catalogYear", "status"),
+                "studyFramework", "catalogYear", "status", "noAdditionalCreditText"),
     "course_offerings": ("_id", "courseNumber", "semesterName", "semesterCode",
                          "academicYear", "catalogVersion", "status",
                          "scheduleGroups", "examDates"),

@@ -184,11 +184,18 @@ async def _load_catalog(
     into `Candidate` objects and carry the credits the cap is counted against;
     the completed courses are what the overlap and duplicate rules compare
     against, and a plan that cannot see them will happily re-plan a passed course.
+
+    `noAdditionalCreditText` is selected by NAME, like every other column, and
+    that is how the overlap rule came to be dead twice over: the column was
+    absent from the schema, and this list would not have read it even once it
+    was there. `build_catalog_overlap_groups` degrades silently on a missing
+    field -- no text, no groups, no exclusion -- so nothing anywhere reported a
+    problem while the planner recommended a course worth zero credits.
     """
     completed_ids = sorted({str(r["courseId"]) for r in completed_records if r.get("courseId")})
     rows = await database.fetch(
         'select "_id", "courseNumber", "title", "titleHebrew", "credits", "faculty", '
-        '"studyFramework", "catalogYear", "status" '
+        '"studyFramework", "catalogYear", "status", "noAdditionalCreditText" '
         'from courses where "courseNumber" = any($1) or "_id" = any($2)',
         candidate_numbers,
         completed_ids,

@@ -54,12 +54,27 @@ create table if not exists courses (
     "faculty"         text,
     "studyFramework"  text,
     "catalogYear"     integer,
-    "status"          text
+    "status"          text,
+    -- מקצועות ללא זיכוי נוסף: the courses this one grants NO ADDITIONAL CREDIT
+    -- alongside. Space-separated numbers, carried verbatim from the Technion
+    -- catalog; 872 of 2,613 courses have one.
+    --
+    -- Not decoration. `build_catalog_overlap_groups` reads exactly this column,
+    -- and the term planner's ONE hard exclusion -- refusing a course worth no
+    -- credit to this student -- is built from what it returns. The column was
+    -- missing from the first Supabase schema, so the function saw no text, built
+    -- zero groups, and the exclusion silently never fired: a senior who had
+    -- passed 01040016 was scheduled 5 credits of 01040065, which the catalog
+    -- says grants no additional credit alongside it.
+    "noAdditionalCreditText" text
     -- NOTE: sources.COURSES also declares `academicYear`, which no `courses`
     -- document carries (0 of 2,613). Deliberately NOT given a column -- see the
     -- schema notes; the declaration should be dropped rather than faked with an
     -- always-null column.
 );
+
+-- For a database created before the column existed.
+alter table courses add column if not exists "noAdditionalCreditText" text;
 
 create index if not exists courses_faculty_idx on courses ("faculty");
 
