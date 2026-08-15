@@ -6,15 +6,19 @@
 <title>UniPilot Agent</title>
 <style>
   :root {
-    --bg: #f7f7f8; --panel: #ffffff; --ink: #1c1c1f; --muted: #6b6b76;
-    --line: #e3e3e8; --accent: #2f5bd8; --accent-ink: #ffffff;
-    --ok: #12794f; --err: #b3261e; --code-bg: #f2f2f5;
+    --bg: #f6f7f9; --panel: #ffffff; --sunk: #f1f2f5;
+    --ink: #16181d; --muted: #6b7280; --faint: #9aa0aa;
+    --line: #e2e4ea; --accent: #2f5bd8; --accent-ink: #ffffff;
+    --ok: #0f7b52; --err: #b3261e; --code-bg: #f1f2f5;
+    --record: #0f7b52; --wiki: #2f5bd8; --predicted: #a15c00; --simulated: #7c3aed;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #16161a; --panel: #1e1e24; --ink: #ececf1; --muted: #9a9aa6;
-      --line: #32323c; --accent: #6a8dff; --accent-ink: #10101a;
-      --ok: #4ade80; --err: #ff8a80; --code-bg: #26262e;
+      --bg: #131418; --panel: #1c1e24; --sunk: #232630;
+      --ink: #e9eaee; --muted: #969bab; --faint: #6f7484;
+      --line: #2e313b; --accent: #7d9bff; --accent-ink: #0d1020;
+      --ok: #4ade80; --err: #ff8f85; --code-bg: #232630;
+      --record: #4ade80; --wiki: #7d9bff; --predicted: #fbbf24; --simulated: #c4a2ff;
     }
   }
   * { box-sizing: border-box; }
@@ -22,22 +26,30 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; }
-  header { margin-bottom: 24px; }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 72px; }
+
+  header { margin-bottom: 22px; }
   h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); font-size: 14px; }
+  .sub { color: var(--muted); font-size: 14px; max-width: 68ch; }
+
   .panel {
     background: var(--panel); border: 1px solid var(--line);
     border-radius: 12px; padding: 16px; margin-bottom: 16px;
   }
+  .panel > h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 0 0 12px; display: flex; align-items: center;
+    gap: 8px; flex-wrap: wrap;
+  }
   label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
   textarea, select {
-    width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+    width: 100%; font: inherit; color: var(--ink); background: var(--sunk);
     border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
   }
-  textarea { min-height: 110px; resize: vertical; }
+  textarea { min-height: 84px; resize: vertical; }
   .row { display: flex; gap: 12px; align-items: flex-end; margin-top: 12px; flex-wrap: wrap; }
-  .row > div { flex: 1 1 220px; }
+  .row > div { flex: 1 1 240px; }
   button {
     font: inherit; font-weight: 600; cursor: pointer;
     background: var(--accent); color: var(--accent-ink);
@@ -46,40 +58,140 @@
   button[disabled] { opacity: .55; cursor: progress; }
   .status { font-size: 13px; color: var(--muted); margin-left: 4px; }
   .status.ok { color: var(--ok); } .status.err { color: var(--err); }
-  h2 { font-size: 15px; margin: 0 0 10px; }
-  .answer { white-space: pre-wrap; }
-  .empty { color: var(--muted); font-style: italic; }
-  details {
-    border: 1px solid var(--line); border-radius: 8px;
-    margin-bottom: 8px; background: var(--bg);
+
+  .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip {
+    font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer;
+    background: var(--sunk); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 11px;
   }
-  summary { cursor: pointer; padding: 9px 12px; font-weight: 600; font-size: 14px; }
+  .chip:hover { color: var(--ink); border-color: var(--accent); }
+
+  .answer { white-space: pre-wrap; font-size: 16px; }
+  .empty { color: var(--faint); font-style: italic; }
+
+  /* The grounding proof: the template the model wrote, and what filled it. */
+  .grounding { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+  .grounding .lede { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .template { font-size: 13.5px; color: var(--muted); white-space: pre-wrap; margin-bottom: 10px; }
+  .slot {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent); border-radius: 4px; padding: 1px 5px; font-weight: 600;
+  }
+  .fills { display: flex; flex-direction: column; gap: 6px; }
+  .fill { display: flex; gap: 8px; align-items: baseline; font-size: 13px; flex-wrap: wrap; }
+  .fill .k { color: var(--accent); font-weight: 600; }
+  .fill .arrow { color: var(--faint); }
+  .fill .v { font-weight: 600; }
+
+  /* Pipeline strip -- the seven modules of the architecture diagram. */
+  .pipeline { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mod {
+    display: flex; flex-direction: column; gap: 2px; flex: 1 1 128px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    background: var(--sunk);
+  }
+  .mod .name { font-size: 12.5px; font-weight: 700; }
+  .mod .what { font-size: 11px; color: var(--muted); line-height: 1.35; }
+  .mod .tag {
+    font-size: 10px; color: var(--faint); line-height: 1.3;
+    /* auto, so the tags line up along the bottom however long the blurbs run */
+    margin-top: auto; padding-top: 5px; border-top: 1px solid var(--line);
+  }
+  .mod.llm { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .mod.llm .name { color: var(--accent); }
+  .mod.llm .tag { color: var(--accent); }
+  .mod.idle { opacity: .5; }
+  .mod.idle .tag { color: var(--faint); }
+
+  /* Turn timeline. */
+  .turns { display: flex; flex-direction: column; gap: 10px; }
+  .turn { border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); }
+  .turn-head {
+    display: flex; gap: 10px; align-items: baseline; padding: 10px 12px; flex-wrap: wrap;
+  }
+  .turn-n {
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+  }
+  .turn-act { font-size: 13.5px; }
+  .turn-act .verb { font-weight: 700; }
+  .calls { display: flex; flex-direction: column; gap: 4px; padding: 0 12px 11px; }
+  .call { font-size: 12.5px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .call .tool {
+    font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 4px; padding: 1px 6px;
+  }
+  .call .expr { color: var(--muted); word-break: break-word; }
+  .call .as { color: var(--faint); }
+
+  /* Fact ledger. */
+  .ledger { display: flex; flex-direction: column; gap: 7px; }
+  .factrow {
+    display: flex; gap: 9px; align-items: baseline; font-size: 13px;
+    padding-bottom: 7px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .factrow:last-child { border-bottom: 0; padding-bottom: 0; }
+  .factrow .fname { font-weight: 700; }
+  .factrow .fval { color: var(--muted); word-break: break-word; flex: 1 1 auto; }
+  .basis {
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+    border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+    border: 1px solid currentColor;
+  }
+  .basis.official_record { color: var(--record); }
+  .basis.wiki_derived, .basis.wiki { color: var(--wiki); }
+  .basis.predicted_pattern { color: var(--predicted); }
+  .basis.simulated { color: var(--simulated); }
+  .basis.derived, .basis.computed { color: var(--muted); }
+  .basis.truncated { color: var(--err); }
+
+  .cols { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 860px) { .cols { grid-template-columns: 1.35fr 1fr; } }
+
+  .metrics { display: flex; gap: 18px; flex-wrap: wrap; }
+  .metric { display: flex; flex-direction: column; gap: 1px; }
+  .metric .n { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .metric .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+
+  details { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: var(--sunk); }
+  summary { cursor: pointer; padding: 9px 12px; font-weight: 600; font-size: 13.5px; }
+  summary .pill { font-weight: 500; }
   .step-body { padding: 0 12px 12px; }
   .step-body h3 {
-    font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
     color: var(--muted); margin: 12px 0 4px;
   }
   pre {
-    background: var(--code-bg); border-radius: 6px; padding: 10px;
-    overflow-x: auto; margin: 0; font-size: 12.5px;
-    white-space: pre-wrap; word-break: break-word; max-height: 340px;
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; overflow-x: auto; margin: 0; font-size: 12.5px;
+    white-space: pre-wrap; word-break: break-word; max-height: 320px;
   }
   .pill {
-    display: inline-block; background: var(--code-bg); color: var(--muted);
-    border-radius: 999px; padding: 1px 9px; font-size: 12px; margin-left: 6px;
+    display: inline-block; background: var(--sunk); color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px; padding: 1px 9px; font-size: 11.5px;
   }
+  .panel > h2 .pill { text-transform: none; letter-spacing: 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>UniPilot Agent</h1>
-    <div class="sub">A grounded academic advisor. Every number in an answer is derived from a fact — never estimated.</div>
+    <div class="sub">
+      A grounded academic advisor. Every number in an answer is written as a slot and filled
+      from a fact the agent actually derived — a typed digit is refused. The trace below shows
+      that happening.
+    </div>
   </header>
 
   <div class="panel">
     <label for="prompt">Prompt</label>
     <textarea id="prompt" placeholder="e.g. Which courses should I take next semester, and how many credits do I still need?"></textarea>
+    <div class="examples" id="examples"></div>
     <div class="row">
       <div>
         <label for="student">Student</label>
@@ -95,10 +207,37 @@
   <div class="panel">
     <h2>Response</h2>
     <div id="answer" class="answer empty">Nothing yet — run the agent.</div>
+    <div id="grounding" hidden class="grounding"></div>
+  </div>
+
+  <div class="panel" id="metrics-panel" hidden>
+    <h2>Cost of this run</h2>
+    <div class="metrics" id="metrics"></div>
+    <div class="note" id="metrics-note"></div>
+  </div>
+
+  <div class="panel" id="pipeline-panel" hidden>
+    <h2>Modules <span class="pill">same names as the architecture diagram</span></h2>
+    <div class="pipeline" id="pipeline"></div>
+  </div>
+
+  <div class="cols" id="cols" hidden>
+    <div class="panel" style="margin:0">
+      <h2>Reasoning <span class="pill" id="turncount"></span></h2>
+      <div class="turns" id="turns"></div>
+    </div>
+    <div class="panel" style="margin:0">
+      <h2>Facts derived <span class="pill" id="factcount"></span></h2>
+      <div class="ledger" id="ledger"></div>
+      <div class="note">
+        Provenance travels with each fact. A value derived from weaker inputs can never come
+        back stronger than the weakest one.
+      </div>
+    </div>
   </div>
 
   <div class="panel">
-    <h2>Steps <span class="pill" id="stepcount">0 LLM calls</span></h2>
+    <h2>Raw trace <span class="pill" id="stepcount">0 LLM calls</span></h2>
     <div id="steps" class="empty">No trace yet.</div>
   </div>
 </div>
@@ -111,6 +250,29 @@ const STUDENTS = [
   { id: "6a5688319341471497d58c59", label: "Data & Information Eng. — 5 courses done" },
 ];
 
+// The seven modules of the architecture diagram, in execution order. Four make
+// no model call, so they never appear in `steps` -- which is correct, since the
+// spec defines `steps` as the LLM calls. Listing them anyway is the point: a
+// trace showing two modules against a diagram showing seven looks like five are
+// missing, when in fact the deterministic four are where the guarantees live.
+const MODULES = [
+  { name: "FrontDoor", llm: false, what: "Resolves whose record this is and seeds the opening facts." },
+  { name: "ReasoningLoop", llm: true, what: "Reads the facts so far, decides the next move: call tools, or answer." },
+  { name: "FactDispatch", llm: false, what: "Runs the tool calls and admits results as typed, provenance-tagged facts." },
+  { name: "Interpreter", llm: true, what: "Reads one value out of a retrieved passage, with the quote it came from." },
+  { name: "ListInterpreter", llm: true, what: "The plural of Interpreter: every listed value, each with its own quote." },
+  { name: "AnswerBoundary", llm: false, what: "Refuses any answer containing a number no fact produced." },
+  { name: "AnswerVerify", llm: false, what: "Replays the finished answer's numbers against post-conditions." },
+];
+
+const EXAMPLES = [
+  "How many credits have I completed so far?",
+  "What is the total credit requirement for my degree, and how many do I still need?",
+  "Am I eligible to take 00960211, and what does it require?",
+  "Will 00940412 be offered next spring?",
+  "Plan my winter semester.",
+];
+
 const $ = (id) => document.getElementById(id);
 const selectEl = $("student");
 for (const s of STUDENTS) {
@@ -118,7 +280,283 @@ for (const s of STUDENTS) {
   opt.value = s.id; opt.textContent = s.label;
   selectEl.appendChild(opt);
 }
+for (const text of EXAMPLES) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = text;
+  b.addEventListener("click", () => { $("prompt").value = text; $("prompt").focus(); });
+  $("examples").appendChild(b);
+}
 
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;   // textContent, never innerHTML
+  return n;
+};
+
+/* ---------- reading a turn ----------
+   The loop's user prompt is assembled by the server in a fixed shape, so it can
+   be read back apart. Every parse here is best-effort and returns empty rather
+   than throwing: a prompt that changes shape must degrade to the raw trace
+   below, never blank the page. */
+
+function section(text, start, end) {
+  const from = text.indexOf(start);
+  if (from < 0) return "";
+  const rest = text.slice(from + start.length);
+  const to = end ? rest.indexOf(end) : -1;
+  return (to < 0 ? rest : rest.slice(0, to)).replace(/^\n+|\s+$/g, "");
+}
+
+function parseFacts(block) {
+  const facts = [];
+  let current = null;
+  for (const line of block.split("\n")) {
+    if (!line.trim()) continue;
+    const head = line.match(/^ {2}(\w+) = (.+)$/);
+    if (head) {
+      const value = head[2].trim();
+      // Two collection shapes: "[44 records]" complete, and
+      // "[5 of 900 records, TRUNCATED -- ...]" when only part was fetched.
+      const records = value.match(/^\[(\d+)(?: of (\d+))? records?\b/);
+      const kind = value.match(/\(([a-z_ ]+)\)$/);
+      current = {
+        name: head[1],
+        value,
+        count: records ? Number(records[1]) : null,
+        total: records && records[2] ? Number(records[2]) : null,
+        truncated: /TRUNCATED/.test(value),
+        kind: records ? "collection" : (kind ? kind[1] : ""),
+        basis: "",
+      };
+      facts.push(current);
+      continue;
+    }
+    if (current && /^\s{4,}\S/.test(line)) {
+      const basis = line.match(/^\s*basis:\s*(\S+)/);
+      if (basis) current.basis = basis[1];
+      continue;
+    }
+    current = null;  // an aside like "(`me` is the id of the student asking)"
+  }
+  return facts;
+}
+
+function parseDecision(response) {
+  let obj = response;
+  if (typeof obj === "string") {
+    try { obj = JSON.parse(obj); } catch { return { kind: "text", text: response }; }
+  }
+  if (!obj || typeof obj !== "object") return { kind: "text", text: String(response ?? "") };
+  if (Array.isArray(obj.calls)) return { kind: "calls", calls: obj.calls };
+  if (typeof obj.answer === "string") return { kind: "answer", answer: obj.answer };
+  return { kind: "text", text: JSON.stringify(obj, null, 2) };
+}
+
+function describePredicate(p) {
+  if (!p || typeof p !== "object") return "";
+  if (Array.isArray(p.all)) return p.all.map(describePredicate).filter(Boolean).join(" and ");
+  if (Array.isArray(p.any)) return "(" + p.any.map(describePredicate).filter(Boolean).join(" or ") + ")";
+  if (p.not) return "not " + describePredicate(p.not);
+  if (!p.path) return "";
+  const raw = p.value;
+  const shown = raw && typeof raw === "object" && "fact" in raw ? `{${raw.fact}}` : JSON.stringify(raw);
+  return `${p.path} ${p.op ?? "="} ${shown}`;
+}
+
+/* A call, said in one line. Falls back to the argument names, which is still
+   more legible than the raw JSON and never lies about what was asked for. */
+function describeCall(call) {
+  const a = call.args || {};
+  switch (call.tool) {
+    case "find": {
+      const where = describePredicate(a.predicate);
+      return `${a.source ?? "?"}${where ? ` where ${where}` : ""}${a.limit ? `, limit ${a.limit}` : ""}`;
+    }
+    case "compute": {
+      const pipes = Array.isArray(a.pipelines) ? a.pipelines : [];
+      return pipes.map((p) => {
+        const stages = (p.stages || []).map((s) =>
+          s.op === "aggregate" ? `${s.agg}(${s.field ?? ""})`
+          : s.op === "filter" ? `filter ${describePredicate(s.predicate)}`
+          : s.op ?? "?"
+        ).join(" → ");
+        return `${stages} over ${p.source ?? "?"}`;
+      }).join("; ") || "pipeline";
+    }
+    case "search_corpus": return `"${a.query ?? ""}"${a.limit ? `, top ${a.limit}` : ""}`;
+    case "interpret":
+    case "extract_list":
+      return `"${a.question ?? a.want ?? "value"}"${a.slug ? ` — from ${a.slug}` : ""}`;
+    case "traverse": return `${a.source ?? "?"} from ${JSON.stringify(a.start ?? a.from ?? "")}`;
+    case "forecast": return `${a.target ?? "?"} in ${a.observations ?? "?"} (per ${a.cycle_path ?? "no cycle"})`;
+    case "optimize": return `${a.objective ?? "?"}: ${a.items ?? "?"} into ${a.slots ?? "?"}`;
+    case "plan_term": return `${(a.terms || []).join(", ") || "?"}, ${(a.candidates || []).length} candidates`;
+    case "propose": return `${a.action ?? "?"} ${a.target ?? ""}`.trim();
+    default: return Object.keys(a).join(", ");
+  }
+}
+
+/* ---------- rendering ---------- */
+
+function renderTurns(loopSteps) {
+  const host = $("turns");
+  host.innerHTML = "";
+  $("turncount").textContent = `${loopSteps.length} turn${loopSteps.length === 1 ? "" : "s"}`;
+
+  loopSteps.forEach((step, i) => {
+    const decision = parseDecision(step.response);
+    const box = el("div", "turn");
+    const head = el("div", "turn-head");
+    head.appendChild(el("span", "turn-n", `TURN ${i + 1}`));
+
+    const act = el("div", "turn-act");
+    if (decision.kind === "calls") {
+      const n = decision.calls.length;
+      act.appendChild(el("span", "verb", `Called ${n} tool${n === 1 ? "" : "s"}`));
+    } else if (decision.kind === "answer") {
+      act.appendChild(el("span", "verb", "Answered"));
+      act.appendChild(document.createTextNode(" — enough facts held to fill every slot"));
+    } else {
+      act.appendChild(el("span", "verb", "Replied"));
+    }
+    head.appendChild(act);
+    box.appendChild(head);
+
+    if (decision.kind === "calls") {
+      const list = el("div", "calls");
+      for (const call of decision.calls) {
+        const row = el("div", "call");
+        row.appendChild(el("span", "tool", call.tool ?? "?"));
+        row.appendChild(el("span", "expr", describeCall(call)));
+        if (call.as) row.appendChild(el("span", "as", `→ ${call.as}`));
+        list.appendChild(row);
+      }
+      box.appendChild(list);
+    } else if (decision.kind === "answer") {
+      const list = el("div", "calls");
+      list.appendChild(el("div", "call", decision.answer));
+      box.appendChild(list);
+    }
+    host.appendChild(box);
+  });
+}
+
+function renderLedger(facts) {
+  const host = $("ledger");
+  host.innerHTML = "";
+  $("factcount").textContent = `${facts.length}`;
+  if (!facts.length) {
+    host.appendChild(el("div", "empty", "No facts were derived."));
+    return;
+  }
+  for (const f of facts) {
+    const row = el("div", "factrow");
+    row.appendChild(el("span", "fname", f.name));
+    row.appendChild(el("span", "fval", factValue(f)));
+    // A partial collection is the one state that silently poisons an average,
+    // so it is called out rather than folded into the record count.
+    if (f.truncated) row.appendChild(el("span", "basis truncated", "partial"));
+    if (f.basis) row.appendChild(el("span", `basis ${f.basis}`, f.basis.replace(/_/g, " ")));
+    else if (f.kind) row.appendChild(el("span", "basis derived", f.kind));
+    host.appendChild(row);
+  }
+}
+
+function factValue(f) {
+  if (f.count === null) return f.value.replace(/\s*\([a-z_ ]+\)$/, "");
+  return f.total ? `${f.count} of ${f.total} records` : `${f.count} records`;
+}
+
+/* The template the model wrote, beside the values that filled it. This is the
+   whole grounding claim in two lines: the model never typed the number. */
+function renderGrounding(template, facts) {
+  const host = $("grounding");
+  host.innerHTML = "";
+  const slots = [...String(template ?? "").matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  if (!slots.length) { host.hidden = true; return; }
+  host.hidden = false;
+
+  host.appendChild(el("div", "lede", "The model wrote this, with slots where the numbers go:"));
+
+  const tpl = el("div", "template");
+  let last = 0;
+  for (const m of String(template).matchAll(/\{(\w+)\}/g)) {
+    tpl.appendChild(document.createTextNode(String(template).slice(last, m.index)));
+    tpl.appendChild(el("span", "slot", m[0]));
+    last = m.index + m[0].length;
+  }
+  tpl.appendChild(document.createTextNode(String(template).slice(last)));
+  host.appendChild(tpl);
+
+  const fills = el("div", "fills");
+  const byName = new Map(facts.map((f) => [f.name, f]));
+  for (const name of [...new Set(slots)]) {
+    const fact = byName.get(name);
+    const row = el("div", "fill");
+    row.appendChild(el("span", "k", `{${name}}`));
+    row.appendChild(el("span", "arrow", "←"));
+    row.appendChild(el("span", "v", fact ? factValue(fact) : "(not held)"));
+    if (fact?.basis) row.appendChild(el("span", `basis ${fact.basis}`, fact.basis.replace(/_/g, " ")));
+    fills.appendChild(row);
+  }
+  host.appendChild(fills);
+}
+
+function renderPipeline(steps) {
+  const used = new Set(steps.map((s) => s.module));
+  const madeCalls = steps.some((s) => parseDecision(s.response).kind === "calls");
+  const host = $("pipeline");
+  host.innerHTML = "";
+  for (const m of MODULES) {
+    // A deterministic module leaves no step, so "ran" is inferred from the
+    // shape of the run, not claimed from the trace.
+    const ran = m.llm ? used.has(m.name)
+      : (m.name === "FactDispatch" ? madeCalls : true);
+    const calls = steps.filter((s) => s.module === m.name).length;
+    const box = el("div", `mod${m.llm ? " llm" : ""}${ran ? "" : " idle"}`);
+    box.appendChild(el("div", "name", m.name));
+    box.appendChild(el("div", "what", m.what));
+    box.appendChild(el("div", "tag",
+      m.llm
+        ? (ran ? `${calls} LLM call${calls === 1 ? "" : "s"} in the trace` : "not needed for this question")
+        : "deterministic — no LLM call, so no step"));
+    host.appendChild(box);
+  }
+  $("pipeline-panel").hidden = false;
+}
+
+function renderMetrics(steps, seconds) {
+  // The cached-prefix claim is about the ReasoningLoop specifically. Interpreter
+  // carries its own, different system prompt, so measuring across every module
+  // makes the prompts look unstable when they are not.
+  const loop = steps.filter((s) => s.module === "ReasoningLoop");
+  const reused = new Set(loop.map((s) => s.prompt?.System_prompt ?? ""));
+  const sysLen = (loop[0] ?? steps[0])?.prompt?.System_prompt?.length ?? 0;
+  const dyn = steps.reduce((n, s) => n + (s.prompt?.User_prompt ?? "").length, 0);
+  const host = $("metrics");
+  host.innerHTML = "";
+  const add = (n, l) => {
+    const m = el("div", "metric");
+    m.appendChild(el("div", "n", n));
+    m.appendChild(el("div", "l", l));
+    host.appendChild(m);
+  };
+  add(String(steps.length), "LLM calls");
+  add(`${seconds}s`, "elapsed");
+  add(sysLen.toLocaleString(), "reused prompt chars");
+  add(dyn.toLocaleString(), "fresh prompt chars");
+
+  $("metrics-note").textContent = reused.size === 1 && loop.length > 1
+    ? `The ReasoningLoop's system prompt is byte-identical on all ${loop.length} turns, so it is `
+      + `served from the provider's prefix cache — only the ${dyn.toLocaleString()} fresh chars are `
+      + "new input. Four of the seven modules make no model call at all: the grounding checks are "
+      + "code, not prompts."
+    : "Four of the seven modules make no model call at all — the grounding checks are code, not prompts.";
+  $("metrics-panel").hidden = false;
+}
+
+/* The spec-required view: module, prompt, response, verbatim and in order. */
 function renderSteps(steps) {
   const host = $("steps");
   host.innerHTML = "";
@@ -130,13 +568,12 @@ function renderSteps(steps) {
   }
   host.className = "";
   steps.forEach((step, i) => {
-    const d = document.createElement("details");
-    const sum = document.createElement("summary");
+    const d = el("details");
+    const sum = el("summary");
     sum.textContent = `${i + 1}. ${step.module ?? "(unnamed module)"}`;
     d.appendChild(sum);
 
-    const body = document.createElement("div");
-    body.className = "step-body";
+    const body = el("div", "step-body");
     const parts = [
       ["System prompt", step.prompt?.System_prompt],
       ["User prompt", step.prompt?.User_prompt],
@@ -144,15 +581,38 @@ function renderSteps(steps) {
     ];
     for (const [heading, value] of parts) {
       if (value === undefined || value === null || value === "") continue;
-      const h = document.createElement("h3");
-      h.textContent = heading;
-      const pre = document.createElement("pre");
+      body.appendChild(el("h3", null, heading));
+      const pre = el("pre");
       pre.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-      body.appendChild(h); body.appendChild(pre);
+      body.appendChild(pre);
     }
     d.appendChild(body);
     host.appendChild(d);
   });
+}
+
+function renderInsight(steps, seconds) {
+  const loop = steps.filter((s) => s.module === "ReasoningLoop");
+  renderPipeline(steps);
+  renderMetrics(steps, seconds);
+
+  if (!loop.length) { $("cols").hidden = true; $("grounding").hidden = true; return; }
+  $("cols").hidden = false;
+
+  // The last turn's prompt carries every fact the run ever held, because the
+  // ledger is cumulative -- so one parse gives the whole ledger.
+  const lastPrompt = loop[loop.length - 1].prompt?.User_prompt ?? "";
+  const facts = parseFacts(section(lastPrompt, "FACTS YOU HOLD:", "\n\nNOTES FROM LAST TURN:"));
+
+  renderTurns(loop);
+  renderLedger(facts);
+
+  const final = parseDecision(loop[loop.length - 1].response);
+  renderGrounding(final.kind === "answer" ? final.answer : "", facts);
+}
+
+function hideInsight() {
+  for (const id of ["cols", "pipeline-panel", "metrics-panel", "grounding"]) $(id).hidden = true;
 }
 
 // One thread per browser tab, per student. Scoped to the student because the
@@ -203,12 +663,16 @@ async function run() {
       answer.className = "answer";
       answer.textContent = data.error ?? "Unknown error.";
     }
-    renderSteps(Array.isArray(data.steps) ? data.steps : []);
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+    renderSteps(steps);
+    // Insight is a reading of the trace, never a precondition for showing it.
+    try { renderInsight(steps, secs); } catch { hideInsight(); }
   } catch (err) {
     status.textContent = "request failed";
     status.className = "status err";
     answer.className = "answer";
     answer.textContent = String(err);
+    hideInsight();
   } finally {
     clearInterval(tick);
     btn.disabled = false;
