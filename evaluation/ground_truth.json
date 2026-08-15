@@ -1,0 +1,67 @@
+{
+  "_about": "Correct answers for the evaluation questions, derived from the data by SQL and by reading the corpus -- never by asking the agent. Each entry records HOW it was derived so a disputed answer can be re-checked rather than re-argued. Regenerate the derivations with `python evaluation/derive_ground_truth.py`.",
+  "_student": {
+    "userId": "6a578a2da43a2cfe1bcc791c",
+    "programSlug": "track-information-systems-engineering",
+    "degree": "הנדסת מערכות מידע (Information Systems Engineering)",
+    "level": "undergraduate",
+    "catalogYear": 2025,
+    "currentSemesterCode": "2025-2",
+    "note": "UNDERGRADUATE. The undergraduate regulations apply; concepts/regulations-graduate.md does NOT."
+  },
+  "_rules_used": {
+    "passing_grade": 55,
+    "passing_grade_source": "concepts/regulations-undergraduate.md § Grading -- 'Passing grade: 55 or above' / 'Below 55 = failing'",
+    "degree_total_credits": 155.0,
+    "degree_total_source": "degree_programs._id = 6a477d511f64e5fd20129b44, totalCredits = 155.0"
+  },
+  "questions": [
+    {
+      "id": "credits_completed",
+      "prompt": "How many credits have I completed so far?",
+      "expected": 129.5,
+      "unit": "credits",
+      "must_contain": ["129.5"],
+      "must_not_contain": ["135"],
+      "derivation": "Sum of creditsEarned over the student's 44 transcript rows, EXCLUDING courses failed under the 55 rule. Raw sum = 135.0; course 01040166 (אלגברה אמ') was graded 30 -- a fail -- and carries 5.5 credits. 135.0 - 5.5 = 129.5. There are no retakes: 44 rows, 44 distinct courseIds.",
+      "contested": true,
+      "contested_note": "The data is internally inconsistent for exactly one row. creditsEarned IS a genuine earned-credit field -- course 03240053 (עברית 3) has catalog credits 3.0 but creditsEarned 0.0 because it was failed -- yet 01040166 was failed with grade 30 and still carries its full 5.5. Trusting the field alone yields 135.0; trusting the regulation yields 129.5. 129.5 is taken as correct because a student cannot count a failed course toward graduation, and regulation 3.1.3(d) requires a failed mandatory course to be re-taken. The BEST answer states 129.5 and mentions that 01040166 was failed and must be repeated.",
+      "ideal_answer": "You have completed 129.5 credits. Note that אלגברה אמ' (01040166) is recorded with 5.5 credits but was graded 30, which is below the passing grade of 55, so it does not count toward your degree and will need to be repeated."
+    },
+    {
+      "id": "credits_required_and_remaining",
+      "prompt": "What is the total credit requirement for my degree, and how many do I still need?",
+      "expected": {"total_required": 155.0, "remaining": 25.5},
+      "unit": "credits",
+      "must_contain": ["155", "25.5"],
+      "must_not_contain": ["20"],
+      "derivation": "degree_programs.totalCredits = 155.0 for degreeId 6a477d511f64e5fd20129b44 (joined from student_profiles.degreeId). Remaining = 155.0 - 129.5 = 25.5.",
+      "contested": true,
+      "contested_note": "Inherits the credits_completed dispute. If 135.0 is accepted as completed, remaining is 20.0. The 155.0 total is not in dispute.",
+      "ideal_answer": "Your degree requires 155 credits in total. You have completed 129.5, so you still need 25.5 -- and that assumes you repeat אלגברה אמ' (01040166), which you failed with a 30."
+    },
+    {
+      "id": "english_requirement",
+      "prompt": "What is the English language requirement I have to satisfy to graduate?",
+      "expected": {"courses_required": 2, "deadline_semesters": 4},
+      "unit": "English-language courses",
+      "must_contain": ["2"],
+      "must_not_contain": ["graduate students", "credit points", "level 2"],
+      "derivation": "concepts/regulations-undergraduate.md § 'English Language (תקנה 1.3.3)': 'From academic year 2021/2022: every student must complete at least 2 English-language courses (training or content courses)'; 'Language training courses must be completed within 4 semesters'; 'Cannot graduate without completing 2 English courses'. Corroborated by the Hebrew section דרישות שפה in the same file.",
+      "contested": false,
+      "trap": "The passage states FOUR different numbers -- English Advanced B is 3 credits, exemption awards 3 credits, 2 courses are required, and training must finish within 4 semesters. An answer of bare '2' is ambiguous; '2 credit points' and 'level 2' are wrong units. Separately, concepts/regulations-graduate.md has its own English section, and this student is an UNDERGRADUATE -- any answer mentioning graduate students has read the wrong document.",
+      "ideal_answer": "From 2021/2022 onward you must complete at least 2 English-language courses (either language-training or English-taught content courses), and language-training courses must be finished within your first 4 semesters. You cannot graduate without meeting this."
+    },
+    {
+      "id": "eligibility_00960211",
+      "prompt": "Am I eligible to take 00960211, and what does it require?",
+      "expected": {"eligible": true, "groups_total": 1, "groups_met": 1, "requires_any_of": ["00940224", "00940226"], "satisfied_via": "00940224"},
+      "must_contain": ["00940224", "00940226"],
+      "must_not_contain": ["not eligible", "2 prerequisites"],
+      "derivation": "prerequisite_edges where course = 00960211 returns 2 rows, both in group '00960211' -- so ONE group, satisfied by ANY ONE of its members. The student's transcript contains 00940224 (מבני נתונים ואלגוריתמים) with grade 76, a genuine pass. Target course 00960211 (מודלים למסחר אלקטרוני, 3.5 credits) is not already on the transcript.",
+      "contested": false,
+      "trap": "The two edges share a group, so they are ALTERNATIVES, not two separate obligations. Counting rows instead of distinct groups reports 2 requirements and can conclude the student is ineligible.",
+      "ideal_answer": "Yes. 00960211 (מודלים למסחר אלקטרוני, 3.5 credits) has one prerequisite group requiring any one of 00940224 or 00940226, and you passed 00940224 with a 76."
+    }
+  ]
+}

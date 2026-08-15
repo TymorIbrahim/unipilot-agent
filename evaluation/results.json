@@ -1,0 +1,110 @@
+[
+  {
+    "id": "credits_completed",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 8.3
+  },
+  {
+    "id": "credits_completed",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 4.4
+  },
+  {
+    "id": "credits_completed",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 3.9
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your degree requires 155 credits, and you still need 25.5 credits.",
+    "steps": 3,
+    "elapsed_s": 9.6
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your degree requires 155 credits in total, and you still need 25.5 credits.",
+    "steps": 3,
+    "elapsed_s": 10.6
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 2,
+    "verdict": "wrong",
+    "why": "never states '25.5'",
+    "answer": "Your degree requires 155 credits total, and you still need 25.5.",
+    "steps": 4,
+    "elapsed_s": 8.1
+  },
+  {
+    "id": "english_requirement",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "The English language requirement you have to satisfy to graduate is 2 English-language courses.",
+    "steps": 5,
+    "elapsed_s": 20.2
+  },
+  {
+    "id": "english_requirement",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need 2 English-language courses to graduate.",
+    "steps": 7,
+    "elapsed_s": 20.0
+  },
+  {
+    "id": "english_requirement",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need to satisfy 2 English courses to graduate.",
+    "steps": 8,
+    "elapsed_s": 37.0
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 0,
+    "verdict": "wrong",
+    "why": "never states '00940226'",
+    "answer": "Yes — you are eligible: you have met 1 prerequisite group and the course has 1 group total. It requires any of 00940224, 00940226.",
+    "steps": 5,
+    "elapsed_s": 39.2
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 1,
+    "verdict": "wrong",
+    "why": "never states '00940226'",
+    "answer": "Yes — you are eligible to take 00960211: 1 of 1 prerequisite groups are satisfied. It requires one of 00940224, 00940226.",
+    "steps": 6,
+    "elapsed_s": 36.7
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 2,
+    "verdict": "wrong",
+    "why": "never states '00940224', '00940226'",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 6,
+    "elapsed_s": 47.0
+  }
+]
