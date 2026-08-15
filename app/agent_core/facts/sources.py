@@ -60,7 +60,20 @@ COMPLETED_COURSES = SourceSchema(
             "passed, else 0. SUM THIS for 'how many credits have I completed'. Summing "
             "`creditsEarned` instead counts courses the student FAILED and overstates the total."
         ),
-        "passed": "false when the grade is below 55, the pass mark. A failed course must be re-taken.",
+        # Imperative, like `creditsCounted` above, and for the same measured
+        # reason. This note used to say only what the column MEANS, and the
+        # model read it, understood it, and still built "courses I have
+        # completed" from every transcript row: 2 of 3 live runs told a student
+        # they were eligible for 01040174 because they had ATTEMPTED 01040166,
+        # which they failed with a 30. `creditsCounted`'s note tells the model
+        # what to DO with it and is used correctly every time.
+        "passed": (
+            "false when the grade is below 55, the pass mark. FILTER ON THIS before treating a "
+            "row as a course the student HAS. A transcript row is an ATTEMPT: a failed one "
+            "counts toward nothing, satisfies no prerequisite, and must be re-taken. Deriving "
+            "'the courses I have completed' without it reports a student ELIGIBLE for a course "
+            "they cannot take."
+        ),
         "creditsEarned": "as recorded by the registrar, INCLUDING some failed courses. Rarely what a question means.",
     },
     basis=Basis.OFFICIAL_RECORD,
@@ -253,6 +266,17 @@ PREREQUISITE_EDGES = SourceSchema(
     # `completed_courses` keys courses by ObjectId while this keys them by
     # number, and the model had no way to know the two differ.
     joins=(("course", "courses.courseNumber"), ("requires", "courses.courseNumber")),
+    field_notes={
+        "requires": (
+            "a course number that satisfies this group only if the student PASSED it. Compare "
+            "against completed courses filtered on `passed`, never against every transcript "
+            "row -- a failed attempt is not a satisfied prerequisite."
+        ),
+        "group": (
+            "edges sharing a group are ALTERNATIVES: any ONE satisfies it. Different groups are "
+            "each required. Count DISTINCT groups, not rows."
+        ),
+    },
     yields=frozenset({"edges"}),
     # 566 of 4,766 edges repeat an `edge` id across OR-branches: one course can
     # require another in two different alternative groups.

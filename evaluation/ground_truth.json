@@ -84,13 +84,14 @@
       "id": "forecast_00940412_spring",
       "prompt": "Will 00940412 be offered next spring?",
       "expected": {"offered": true, "spring_years": 3, "years_observed": 3, "cycle_rate": 1.0, "naive_rate": 0.43},
-      "must_contain": ["00940412"],
+      "must_contain": [],
       "must_not_contain": ["0.43"],
       "stance": "affirm",
       "derivation": "course_offerings for 00940412 (הסתברות מ) holds 7 rows spanning academic years 2023, 2024 and 2025, all status 'published': spring in 2023, 2024 and 2025; winter in 2024 and 2025; summer in 2024 and 2025. Spring occurred in 3 of the 3 years observed, so the recurrence rate is 3/3 = 1.00 and the course should be projected to run again. 7 observations clears forecast.MIN_OBSERVATIONS = 3.",
       "contested": false,
       "trap": "The documented inversion, live in this course's data. Counting spring offerings against ALL offerings gives 3/7 = 0.43 and forecasts 'will not run' -- for a course that has run every single spring on record. The wrong answer names the same course code as the right one, so `must_contain` cannot separate them; only `stance` can. This is why the tool requires `cycle_path`: without it the denominator is the number of offerings rather than the number of years, and the most reliably offered courses get the most pessimistic forecast.",
-      "note_on_scoring": "A run that answers 'I could not determine this' is scored wrong, not excused. The whole history is fetchable in one call -- 7 rows -- so an incomplete-history refusal means the run failed to fetch what was there.",
+      "note_on_scoring": "A run that answers 'I could not determine this' is scored wrong, not excused. The whole history is fetchable in one call -- 7 rows -- so an incomplete-history refusal means the run failed to fetch what was there. `must_contain` is deliberately EMPTY: the prompt names the course, so a bare 'yes' is an unambiguous and correct answer, and the stance carries the whole correctness test. Requiring the code here was tried and inverted the ranking -- on the 3-repeat run of 2026-08-15 it failed 'yes -- it will be offered next spring' and passed 'Yes, 00940412 has 3 offerings next spring', which is the ONLY wrong answer of the three: there are no recorded 2026 offerings, and the 3 is the number of PAST springs restated as a fact about the future.",
+      "what_this_cannot_catch": "That fabrication. An answer saying '3 offerings next spring' and an answer saying 'it ran in all 3 years on record' both state 3, both affirm, and no must/must_not rule separates them. The limit is recorded rather than papered over: a run that invents a future count passes this question, and only a human reading the answer will see it.",
       "ideal_answer": "Yes, almost certainly. 00940412 (הסתברות מ) has been offered in spring in every one of the three academic years on record (2023, 2024, 2025), so it should run again next spring. It also runs in winter and summer, so spring is not your only opportunity."
     }
   ]

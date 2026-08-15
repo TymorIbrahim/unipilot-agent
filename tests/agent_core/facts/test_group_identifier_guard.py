@@ -171,3 +171,46 @@ class TestAChoiceMustBeBetweenDifferentCourses:
             _answer("requires any one of 00960211, 00960211."), {}, self.QUESTION
         )
         assert violations and violations[0].kind == "degenerate_alternatives"
+
+
+class TestTheGuardDoesNotDependOnPhrasing:
+    """It did, and the phrasing changed.
+
+    The lead-in vocabulary was `any one of|one of|either`. A live answer said
+    "00960211 has 1 prerequisite group, with alternatives 00960211, 00960211" --
+    the course listed against itself, and missed, because "alternatives" was not
+    in the list. Same drift as the `prereqStatus` prompt: a check keyed on prose,
+    and prose that got reworded.
+    """
+
+    QUESTION = "Am I eligible to take 00960211, and what does it require?"
+
+    def _check(self, text: str):
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        return check_alternatives_are_distinct(text, self.QUESTION)
+
+    def test_the_live_leak_is_caught(self) -> None:
+        assert self._check(
+            "Yes. 00960211 has 1 prerequisite group, with alternatives 00960211, 00960211."
+        )
+
+    def test_it_is_caught_with_no_lead_in_at_all(self) -> None:
+        """The repeated code IS the defect; the words around it are decoration."""
+        assert self._check("The prerequisites are 00940224, 00940224.")
+
+    def test_every_lead_in_still_works(self) -> None:
+        for lead in ("any one of", "any of", "one of", "either", "options:", "choose from"):
+            assert self._check(f"It requires {lead} 00960211, 00960211."), lead
+
+    def test_a_real_choice_is_left_alone(self) -> None:
+        assert not self._check("It requires any one of 00940224, 00940226.")
+
+    def test_two_different_codes_in_prose_are_left_alone(self) -> None:
+        """The phrasing-independent rule must not fire on ordinary lists."""
+        assert not self._check("You have completed 00940224 and 00940226.")
+
+    def test_a_code_repeated_across_sentences_is_left_alone(self) -> None:
+        """Mentioning a course twice is normal writing. Only a LIST of it
+        against itself is degenerate."""
+        assert not self._check("00960211 is open to you. You may take 00960211 next spring.")

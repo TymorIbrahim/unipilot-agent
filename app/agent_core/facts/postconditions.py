@@ -144,9 +144,22 @@ def check_no_edge_identifiers(text: str) -> list[Violation]:
 
 
 _ALTERNATIVES = re.compile(
-    r"(?:any one of|one of|either)\s+((?:\d{6,8}\s*(?:,|or|and)\s*)+\d{6,8})", re.IGNORECASE
+    r"(?:any one of|any of|one of|either|alternatives?|options?|choose from|choice of)"
+    r"[:\s]+((?:\d{6,8}\s*(?:,|or|and)\s*)+\d{6,8})",
+    re.IGNORECASE,
 )
 _CODE = re.compile(r"\b\d{6,8}\b")
+
+_REPEATED_IN_A_LIST = re.compile(r"\b(\d{6,8})\b(?:\s*(?:,|or|and)\s*\1\b)+")
+"""The same course code listed against itself, whatever words introduce it.
+
+The lead-in vocabulary above was `any one of|one of|either`, and a live answer
+said "with alternatives 00960211, 00960211" -- degenerate, and missed, because
+`alternatives` was not in the list. That is the `prereqStatus` drift again: a
+check keyed on prose and prose that got reworded.
+
+This needs no lead-in. A list of one code repeated is never right in any
+sentence: not as alternatives, not as prerequisites, not as courses to take."""
 
 
 def check_alternatives_are_distinct(text: str, question: str = "") -> list[Violation]:
@@ -165,6 +178,20 @@ def check_alternatives_are_distinct(text: str, question: str = "") -> list[Viola
     """
     asked = set(_CODE.findall(question or ""))
     violations: list[Violation] = []
+
+    # Phrasing-independent first, so a reworded lead-in cannot hide it.
+    for repeated in _REPEATED_IN_A_LIST.findall(text or ""):
+        violations.append(
+            Violation(
+                "degenerate_alternatives",
+                f"the answer offers a choice between {repeated} and itself. Alternatives "
+                "come from the edges' `requires` field -- projecting `course` collapses every "
+                "option onto the course being asked about.",
+            )
+        )
+    if violations:
+        return violations
+
     for listing in _ALTERNATIVES.findall(text or ""):
         options = _CODE.findall(listing)
         if len(options) > 1 and len(set(options)) == 1:

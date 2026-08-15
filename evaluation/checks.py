@@ -72,6 +72,16 @@ _NEGATIVE_CLAIMS = (
     r"\bcannot (take|register)\b",
     r"\bcan ?n[o']?t (take|register)\b",
     r"^\s*no[,.\s—-]",
+    # A leading "No." was not enough. Live answer, scored FAIL while correct:
+    #   "For 01040174, no -- you meet 0 of 1 prerequisite groups."
+    # The denial is real and mid-sentence, because the model led with the course.
+    r"[,;:]\s*no\b\s*[—–-]",
+    r"\bso,?\s*no\b",
+    # Domain-specific and unambiguous: this phrasing IS the refusal, and the
+    # count is what makes it one. It survives every rewording of the prose
+    # around it, which "no" does not.
+    r"\bmeet(s|ing)? 0 of\b",
+    r"\b0 of \d+ prerequisite groups?\b",
 )
 _CLAIMS_NO = re.compile("|".join(_NEGATIVE_CLAIMS), re.IGNORECASE | re.MULTILINE)
 
@@ -126,8 +136,20 @@ def scores(
     must: tuple = (),
     must_not: tuple = (),
     stance: str | None = None,
-) -> tuple[bool, str]:
-    """(passed, why) for the numbers, codes and STANCE an answer must carry.
+) -> tuple[str, str]:
+    """(verdict, why), where verdict is "correct", "incomplete" or "wrong".
+
+    Three states, not two, because two conflated the only distinction that
+    matters. `eligibility_01040174` answered "yes, you meet 1 of 1 prerequisite
+    groups" for a student who meets none -- a student told to register for
+    something they cannot take. Fixed, it answered "No. You meet 0 of 1", which
+    is right but does not say WHICH prerequisite is missing, so it still failed
+    `must_contain` and the score stayed 0/3. A measurement that cannot see a
+    dangerous answer become a correct one is not measuring.
+
+    So the STANCE is correctness and is checked first: getting it wrong is
+    "wrong". Missing numbers or codes with the stance right is "incomplete" --
+    a real failure, counted separately, never confused with the other.
 
     `stance` is "affirm" or "deny". Some questions have no distinguishing
     number: a forecast's failure mode is INVERSION -- "00940412 will not be
@@ -136,24 +158,24 @@ def scores(
     cannot separate those two; only the stance can.
     """
     if not text:
-        return False, "no answer at all"
+        return "wrong", "no answer at all"
     for value in must_not:
         if states_number(text, value):
-            return False, f"states {value}, which is the known-wrong value"
-    missing = [v for v in must if not states_number(text, v)]
-    if missing:
-        return False, f"never states {', '.join(str(m) for m in missing)}"
+            return "wrong", f"states {value}, which is the known-wrong value"
     if stance == "affirm":
         # Order matters: "will not be offered" contains "be offered", so the
         # negative claim has to be tested first or an inversion scores as a pass.
         if claims_no(text):
-            return False, "answers no where the data says yes"
+            return "wrong", "answers no where the data says yes"
         if not claims_yes(text):
-            return False, "never affirms, and the data says yes"
+            return "wrong", "never affirms, and the data says yes"
     elif stance == "deny":
         if not claims_no(text):
-            return False, "never states the negative, and the data says no"
-    return True, "matches ground truth"
+            return "wrong", "never states the negative, and the data says no"
+    missing = [v for v in must if not states_number(text, v)]
+    if missing:
+        return "incomplete", f"right answer, but never states {', '.join(str(m) for m in missing)}"
+    return "correct", "matches ground truth"
 
 
 __all__ = [

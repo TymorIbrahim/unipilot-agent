@@ -46,13 +46,12 @@ def score(answer: str | None, question: dict) -> tuple[str, str]:
     """
     if not answer:
         return "no-answer", "the run produced no answer at all"
-    passed, why = scores(
+    return scores(
         answer,
         must=tuple(question.get("must_contain", [])),
         must_not=tuple(question.get("must_not_contain", [])),
         stance=question.get("stance"),
     )
-    return ("correct" if passed else "wrong"), why
 
 
 async def run_once(prompt: str, student_id: str) -> tuple[str | None, int, float]:
@@ -89,7 +88,8 @@ async def main() -> None:
         for index in range(args.repeats):
             answer, steps, elapsed = await run_once(question["prompt"], student)
             verdict, why = score(answer, question)
-            mark = {"correct": "PASS", "wrong": "FAIL", "no-answer": "NONE"}[verdict]
+            mark = {"correct": "PASS", "incomplete": "THIN", "wrong": "FAIL",
+                    "no-answer": "NONE"}[verdict]
             print(f"  [{mark}] run {index + 1}: {steps} steps, {elapsed:.0f}s -- {why}")
             print(f"         {(answer or '').strip()[:190]}")
             results.append({
@@ -102,15 +102,23 @@ async def main() -> None:
     print("=" * 74)
     print("SUMMARY")
     print("=" * 74)
-    total_correct = 0
+    total_correct = total_thin = total_wrong = 0
     for question in questions:
         rows = [r for r in results if r["id"] == question["id"]]
         correct = sum(1 for r in rows if r["verdict"] == "correct")
+        thin = sum(1 for r in rows if r["verdict"] == "incomplete")
         total_correct += correct
+        total_thin += thin
+        total_wrong += len(rows) - correct - thin
         steps = [r["steps"] for r in rows]
-        print(f"  {question['id']:<34} {correct}/{len(rows)} correct   "
+        note = f" (+{thin} thin)" if thin else ""
+        print(f"  {question['id']:<34} {correct}/{len(rows)} correct{note}   "
               f"steps {min(steps)}-{max(steps)} (mean {sum(steps) / len(steps):.1f})")
-    print(f"\n  OVERALL: {total_correct}/{len(results)} correct")
+    # Reported apart on purpose. A THIN answer is right and unhelpful; a WRONG
+    # one is a claim a student would act on. Summing them hid the moment
+    # `eligibility_01040174` stopped saying "yes" to an ineligible student.
+    print(f"\n  OVERALL: {total_correct}/{len(results)} correct, "
+          f"{total_thin} right-but-thin, {total_wrong} wrong")
 
     RESULTS.write_text(json.dumps(results, indent=2, ensure_ascii=False))
     print(f"  written to {RESULTS}")
