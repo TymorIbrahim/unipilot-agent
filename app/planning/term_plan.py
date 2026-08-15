@@ -235,23 +235,36 @@ def _unscheduled(
     satisfied_numbers: set[str],
     last_reason: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """One row per candidate that was never placed and is not already satisfied."""
+    """One row per candidate that was never placed, INCLUDING the already-completed.
+
+    Completed candidates used to be skipped entirely, so a model that handed
+    over a whole curriculum got back a plan that simply did not mention them:
+    six passed courses in one live call were neither placed nor reported, and
+    nothing distinguished them from candidates that were lost. The catalog tells
+    the model this tool returns the placed courses "plus the ones that did not
+    fit and why", and a silent omission is the one answer a student cannot
+    interrogate -- "why isn't X in my plan" had no answer at all.
+
+    Reported by NUMBER as well as id, because that is how the placement loop
+    skips them: a transcript row whose catalog id no longer resolves still
+    matches by number, and 28% of this deployment's transcript rows reference a
+    course that no longer exists.
+    """
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for candidate in ordered:
         course_id = normalize_course_id(candidate.course["_id"])
         number = _course_number(candidate.course)
-        if course_id in placed_ids or course_id in completed_course_ids:
+        if course_id in placed_ids:
             continue
         if number in seen:
             continue
         seen.add(number)
-        rows.append(
-            {
-                "courseNumber": number,
-                "reason": last_reason.get(number, "Did not fit the requested term(s)"),
-            }
-        )
+        if course_id in completed_course_ids or _number_key(number) in satisfied_numbers:
+            reason = "Already completed -- it earns no further credit"
+        else:
+            reason = last_reason.get(number, "Did not fit the requested term(s)")
+        rows.append({"courseNumber": number, "reason": reason})
     return rows
 
 
