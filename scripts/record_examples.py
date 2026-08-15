@@ -116,6 +116,27 @@ async def main_async(arguments: argparse.Namespace) -> int:
 
     examples = await record(selected, arguments.student)
 
+    if arguments.only and OUTPUT_PATH.is_file():
+        # MERGE, never replace. `--only` used to write just the recorded subset
+        # over the whole file, so re-recording one example silently dropped the
+        # other three from `/api/agent_info` -- the endpoint would publish a
+        # single example and nothing would say the rest had been deleted.
+        # Re-recording one flaky question is exactly what `--only` is for, so
+        # that is the path that must not lose the others.
+        try:
+            existing = json.loads(OUTPUT_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            existing = []
+        replaced = {example["prompt"] for example in examples}
+        # Keep the original ORDER: the questions were chosen to walk the reader
+        # from the simplest path to the most involved, and a re-recorded example
+        # jumping to the end would break that on the published endpoint.
+        by_prompt = {example["prompt"]: example for example in examples}
+        merged = [by_prompt.get(old["prompt"], old) for old in existing]
+        merged += [e for e in examples if e["prompt"] not in {o["prompt"] for o in existing}]
+        print(f"  merged: {len(replaced)} re-recorded, {len(merged)} published in total")
+        examples = merged
+
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(examples, ensure_ascii=False, indent=2)
     OUTPUT_PATH.write_text(payload, encoding="utf-8")

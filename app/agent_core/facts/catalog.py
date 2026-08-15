@@ -87,7 +87,15 @@ PRIMITIVES: tuple[ToolSpec, ...] = (
             "and the academic regulations. The `find` sources hold a student's own records "
             "(transcript, plan, profile) and the raw catalog -- they do NOT hold which courses a "
             "degree requires or which count as electives. That is here. Returns CANDIDATES with "
-            "scores, never an answer; reading one is a separate `interpret` step."
+            "scores, never an answer; reading one is a separate `interpret` step.\n"
+            "     Two KINDS of page answer differently, and picking the wrong kind gives a real "
+            "quote to the wrong question. A `regulations-*` page states the rules that apply to "
+            "EVERY student -- the English and Hebrew requirements, the pass mark, GPA minimums, "
+            "graduation conditions. A `track-*` page states what THIS degree adds: its course "
+            "list, its electives, and notes about specific courses. For 'what must I do to "
+            "graduate' read the REGULATIONS; a track page's line on the same topic is usually a "
+            "note about one course, and answering from it gives a deadline where the requirement "
+            "was asked for. When both look relevant, read both and say which is which."
         ),
         example={"tool": "search_corpus", "as": "policy_hits", "args": {"query": "industrial engineering track required courses and electives", "limit": 5}},
         requires="retriever",

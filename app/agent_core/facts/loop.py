@@ -42,13 +42,23 @@ from app.agent_core.facts.presentation import render_facts
 from app.agent_core.facts.propose import Proposal
 
 MAX_TURNS = 8
-NO_PROGRESS_LIMIT = 3
+NO_PROGRESS_LIMIT = 5
 """Turns without a new fact before the loop gives up.
 
 Raised from 2 after live runs: a lookup whose key must be computed first
 legitimately spends a turn producing the key and another using it, and a model
 that mis-shapes the first attempt needs one more. Two was tight enough to kill
 runs that were converging; the guard is against WANDERING, not against thinking.
+
+Raised again from 3 when `_call_signatures` landed. That change made a repeated
+derivation count as no progress -- correctly -- but it also made this number
+mean something much stricter than it used to: before it, almost nothing reset
+the counter's opposite, so three was nearly unreachable. Holding it at three
+turned a run that would have thrashed and eventually converged into one that
+stalled and returned nothing, which is the worse outcome of the two. Measured on
+the knowledge-base question, which searches several phrasings before it finds
+the right page: it stalled twice while recording examples, and its successful
+runs use four to six turns.
 """
 REJECTION_LIMIT = 3
 
