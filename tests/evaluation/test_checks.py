@@ -13,7 +13,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "evaluation"))
 
-from checks import claims_yes, denies_knowledge, mentions_code, scores, states_number  # noqa: E402
+from checks import (  # noqa: E402
+    claims_no,
+    claims_yes,
+    denies_knowledge,
+    mentions_code,
+    scores,
+    states_number,
+)
 
 
 class TestTheVerdictsThatWereWrong:
@@ -85,3 +92,61 @@ class TestScores:
     def test_no_answer_fails_distinctly(self) -> None:
         passed, why = scores(None, must=("129.5",))
         assert not passed and "no answer" in why
+
+
+class TestAClaimOfNoIsNotADenialOfKnowledge:
+    """`forecast`'s documented failure inverts the ANSWER while keeping every
+    number and course code intact. The two shapes look alike and must not."""
+
+    def test_an_inverted_forecast_is_a_claim(self) -> None:
+        text = "00940412 will not be offered next spring."
+        assert claims_no(text)
+        assert not denies_knowledge(text), "this asserts a fact; it does not decline to"
+
+    def test_an_honest_refusal_is_not_a_negative_claim(self) -> None:
+        text = "I could not determine whether 00940412 runs next spring."
+        assert denies_knowledge(text)
+        assert not claims_no(text), "declining to answer must not score as answering no"
+
+    def test_a_leading_no_is_a_negative_claim(self) -> None:
+        assert claims_no("No — you have not met the prerequisites for that course.")
+
+    def test_a_projection_affirms_without_the_word_yes(self) -> None:
+        """Marking this a non-answer is the pessimistic failure this file exists
+        to prevent -- it is a correct, well-hedged forecast."""
+        text = "00940412 has run every spring for the last three years, so it is expected again."
+        assert claims_yes(text)
+        assert not claims_no(text)
+
+
+class TestStance:
+    AFFIRMED = "Yes — 00940412 has been offered every spring on record."
+    INVERTED = "00940412 will not be offered next spring."
+
+    def test_an_affirmation_passes_an_affirm_stance(self) -> None:
+        passed, _ = scores(self.AFFIRMED, must=("00940412",), stance="affirm")
+        assert passed
+
+    def test_the_inversion_fails_even_though_every_number_matches(self) -> None:
+        """The whole reason stance exists: `must_contain` cannot tell these
+        apart, because the wrong answer names the same course as the right one."""
+        by_numbers, _ = scores(self.INVERTED, must=("00940412",))
+        assert by_numbers, "precondition: the numeric check alone cannot catch this"
+
+        passed, why = scores(self.INVERTED, must=("00940412",), stance="affirm")
+        assert not passed and "no" in why
+
+    def test_silence_on_the_question_fails_an_affirm_stance(self) -> None:
+        text = "00940412 is worth 4 credits and belongs to your track."
+        passed, why = scores(text, must=("00940412",), stance="affirm")
+        assert not passed and "never affirms" in why
+
+    def test_a_deny_stance_wants_the_negative(self) -> None:
+        passed, _ = scores("No — that course is not offered in winter.", stance="deny")
+        assert passed
+        passed, _ = scores("Yes, go ahead and take it.", stance="deny")
+        assert not passed
+
+    def test_no_stance_leaves_scoring_unchanged(self) -> None:
+        passed, _ = scores(self.INVERTED, must=("00940412",), stance=None)
+        assert passed

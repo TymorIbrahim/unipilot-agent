@@ -19,6 +19,12 @@ from app.runner import DEFAULT_STUDENT_ID  # noqa: E402
 
 STUDENT = DEFAULT_STUDENT_ID
 TARGET_COURSE = "00960211"
+BLOCKED_COURSE = "01040174"
+"""Eligible only if a FAILED attempt counts. One group, two members, neither passed."""
+
+FORECAST_COURSE = "00940412"
+"""Ran every spring on record, and in winter and summer too -- so the rate is
+1.00 per year and 0.43 per offering, and the two disagree about the answer."""
 
 
 async def main() -> None:
@@ -146,6 +152,75 @@ async def main() -> None:
 
     already = TARGET_COURSE in completed_numbers
     print(f"  (already completed {TARGET_COURSE}? {already})")
+
+    passed_numbers = [
+        row["courseNumber"]
+        for row in await db.fetch(
+            'select distinct c."courseNumber" from completed_courses cc '
+            'join courses c on c."_id" = cc."courseId" where cc."userId" = $1 and cc."passed"',
+            STUDENT,
+        )
+    ]
+    failed_numbers = sorted(set(completed_numbers) - set(passed_numbers))
+
+    print("\n" + "=" * 74)
+    print(f"Q5 GROUND TRUTH -- eligibility for {BLOCKED_COURSE}, which turns on the PASSING rule")
+    print("=" * 74)
+    print(f"  failed courses on this transcript: {failed_numbers}")
+
+    blocked_edges = await db.fetch(
+        'select "requires", "group" from prerequisite_edges where "course" = $1 order by "group", "requires"',
+        BLOCKED_COURSE,
+    )
+    blocked_groups: dict = {}
+    for row in blocked_edges:
+        blocked_groups.setdefault(row["group"], []).append(row["requires"])
+    for group, requires in blocked_groups.items():
+        via_passed = [r for r in requires if r in passed_numbers]
+        via_failed = [r for r in requires if r in failed_numbers]
+        print(f"    group {group}: any one of {requires}")
+        print(f"      satisfied by a PASSED course: {via_passed or '-'}")
+        print(f"      would be satisfied by a FAILED one: {via_failed or '-'}")
+    strict = all(any(r in passed_numbers for r in req) for req in blocked_groups.values())
+    loose = all(
+        any(r in passed_numbers or r in failed_numbers for r in req)
+        for req in blocked_groups.values()
+    )
+    print(f"\n  ELIGIBLE, counting only passes : {strict}   <- ground truth")
+    print(f"  ELIGIBLE, counting every attempt: {loose}   <- the defect's answer")
+
+    print("\n  every course whose eligibility FLIPS on the passing rule:")
+    all_edges = await db.fetch('select "course", "requires", "group" from prerequisite_edges')
+    by_course: dict = {}
+    for row in all_edges:
+        by_course.setdefault(row["course"], {}).setdefault(row["group"], []).append(row["requires"])
+    flips = [
+        course
+        for course, groups in by_course.items()
+        if all(any(r in passed_numbers or r in failed_numbers for r in req) for req in groups.values())
+        and not all(any(r in passed_numbers for r in req) for req in groups.values())
+    ]
+    print(f"    {len(flips)}: {sorted(flips)}")
+
+    print("\n" + "=" * 74)
+    print(f"Q6 GROUND TRUTH -- will {FORECAST_COURSE} run next spring")
+    print("=" * 74)
+    offerings = await db.fetch(
+        'select "academicYear", "semesterName", "status" from course_offerings '
+        'where "courseNumber" = $1 order by "academicYear", "semesterName"',
+        FORECAST_COURSE,
+    )
+    for row in offerings:
+        print(f"    {row['academicYear']} {row['semesterName']:<8} {row['status']}")
+    years = {row["academicYear"] for row in offerings}
+    spring_years = {row["academicYear"] for row in offerings if row["semesterName"] == "spring"}
+    spring_rows = [row for row in offerings if row["semesterName"] == "spring"]
+    print(f"\n  observations: {len(offerings)} across {len(years)} academic years {sorted(years)}")
+    print(f"  spring occurred in {len(spring_years)} of {len(years)} years {sorted(spring_years)}")
+    print(f"  A) rate per CYCLE (correct)   : {len(spring_years)}/{len(years)} = "
+          f"{len(spring_years) / len(years):.2f}   <- ground truth: it runs")
+    print(f"  B) rate per OFFERING (the bug): {len(spring_rows)}/{len(offerings)} = "
+          f"{len(spring_rows) / len(offerings):.2f}   <- forecasts 'will not run'")
 
     await close_pool()
 

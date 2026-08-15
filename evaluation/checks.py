@@ -44,7 +44,36 @@ _DENIALS = (
 )
 _DENIES = re.compile("|".join(_DENIALS), re.IGNORECASE)
 
-_AFFIRMS = re.compile(r"\byes\b|\byou are eligible\b|\byou meet\b|\byou can take\b", re.IGNORECASE)
+_AFFIRMS = re.compile(
+    r"\byes\b|\byou are eligible\b|\byou meet\b|\byou can take\b"
+    # A projection affirms without ever saying "yes": "it has run every spring,
+    # so it is expected again". Scoring that as a non-answer is the pessimistic
+    # failure this file exists to prevent.
+    r"|\b(will|should) (be )?(offered|run|available)\b"
+    r"|\bis (expected|likely|on track)\b|\bexpect(ed)? to\b|\blikely to\b"
+    r"|\bevery (spring|winter|summer|semester|year)\b",
+    re.IGNORECASE,
+)
+
+_NEGATIVE_CLAIMS = (
+    # Not a denial of KNOWLEDGE -- a confident claim that the thing is false.
+    # "I could not determine whether it runs" is honest; "it will not run" is
+    # the inverted forecast, and only the second one is a wrong answer.
+    r"\bwill not\b",
+    r"\bwo ?n[o']?t\b",
+    r"\bnot be (offered|available|running)\b",
+    r"\bis ?n[o']?t (offered|available|expected)\b",
+    r"\bunlikely\b",
+    r"\bnot likely\b",
+    r"\bnot expected\b",
+    r"\bnot eligible\b",
+    r"\bdoes ?n[o']?t meet\b",
+    r"\bdo ?n[o']?t meet\b",
+    r"\bcannot (take|register)\b",
+    r"\bcan ?n[o']?t (take|register)\b",
+    r"^\s*no[,.\s—-]",
+)
+_CLAIMS_NO = re.compile("|".join(_NEGATIVE_CLAIMS), re.IGNORECASE | re.MULTILINE)
 
 
 def states_number(text: str, number: str | float) -> bool:
@@ -79,8 +108,33 @@ def claims_yes(text: str) -> bool:
     return bool(_AFFIRMS.search(text or ""))
 
 
-def scores(text: str | None, *, must: tuple = (), must_not: tuple = ()) -> tuple[bool, str]:
-    """(passed, why) for numbers/codes an answer must and must not state."""
+def claims_no(text: str) -> bool:
+    """Whether the answer asserts the negative -- will NOT run, NOT eligible.
+
+    Distinct from `denies_knowledge` on purpose. "I could not determine whether
+    it runs next spring" is a correct answer to an unanswerable question; "it
+    will not run next spring" is a claim, and when the data says it has run
+    every spring on record, it is a WRONG claim. Only the second is scored as a
+    failure, so the two must not share a predicate.
+    """
+    return bool(_CLAIMS_NO.search(text or ""))
+
+
+def scores(
+    text: str | None,
+    *,
+    must: tuple = (),
+    must_not: tuple = (),
+    stance: str | None = None,
+) -> tuple[bool, str]:
+    """(passed, why) for the numbers, codes and STANCE an answer must carry.
+
+    `stance` is "affirm" or "deny". Some questions have no distinguishing
+    number: a forecast's failure mode is INVERSION -- "00940412 will not be
+    offered next spring" when it has run every spring on record -- and the wrong
+    answer names exactly the same course code as the right one. `must_contain`
+    cannot separate those two; only the stance can.
+    """
     if not text:
         return False, "no answer at all"
     for value in must_not:
@@ -89,10 +143,21 @@ def scores(text: str | None, *, must: tuple = (), must_not: tuple = ()) -> tuple
     missing = [v for v in must if not states_number(text, v)]
     if missing:
         return False, f"never states {', '.join(str(m) for m in missing)}"
+    if stance == "affirm":
+        # Order matters: "will not be offered" contains "be offered", so the
+        # negative claim has to be tested first or an inversion scores as a pass.
+        if claims_no(text):
+            return False, "answers no where the data says yes"
+        if not claims_yes(text):
+            return False, "never affirms, and the data says yes"
+    elif stance == "deny":
+        if not claims_no(text):
+            return False, "never states the negative, and the data says no"
     return True, "matches ground truth"
 
 
 __all__ = [
+    "claims_no",
     "claims_yes",
     "denies_knowledge",
     "mentions_code",

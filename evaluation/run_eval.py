@@ -50,6 +50,7 @@ def score(answer: str | None, question: dict) -> tuple[str, str]:
         answer,
         must=tuple(question.get("must_contain", [])),
         must_not=tuple(question.get("must_not_contain", [])),
+        stance=question.get("stance"),
     )
     return ("correct" if passed else "wrong"), why
 

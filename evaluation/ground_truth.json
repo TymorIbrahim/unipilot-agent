@@ -1,5 +1,10 @@
 {
   "_about": "Correct answers for the evaluation questions, derived from the data by SQL and by reading the corpus -- never by asking the agent. Each entry records HOW it was derived so a disputed answer can be re-checked rather than re-argued. Regenerate the derivations with `python evaluation/derive_ground_truth.py`.",
+  "_not_scored_here": {
+    "plan_term": "Checked structurally in `tests/reachability/test_plan_term_against_data.py`, not as prose. There is no single correct winter plan -- many are valid -- so no `expected` string exists, and a `must_not_contain` listing the courses that must not be PLACED would fail the best answers, the ones that name a course in order to explain why it was left out. The invariants (offered that term, exists in the catalog, under the credit cap, not already passed, nothing silently dropped) are checkable and are checked there against the real planner.",
+    "search_corpus": "Exercised through `english_requirement`, which is answerable only from the corpus.",
+    "traverse": "Exercised through `eligibility_00960211` and `eligibility_01040174`, both of which need the prerequisite edges walked."
+  },
   "_student": {
     "userId": "6a578a2da43a2cfe1bcc791c",
     "programSlug": "track-information-systems-engineering",
@@ -62,6 +67,31 @@
       "contested": false,
       "trap": "The two edges share a group, so they are ALTERNATIVES, not two separate obligations. Counting rows instead of distinct groups reports 2 requirements and can conclude the student is ineligible.",
       "ideal_answer": "Yes. 00960211 (מודלים למסחר אלקטרוני, 3.5 credits) has one prerequisite group requiring any one of 00940224 or 00940226, and you passed 00940224 with a 76."
+    },
+    {
+      "id": "eligibility_01040174",
+      "prompt": "Am I eligible to take 01040174?",
+      "expected": {"eligible": false, "groups_total": 1, "groups_met": 0, "requires_any_of": ["01040066", "01040166"], "blocked_because": "01040166 was failed with a 30; 01040066 was never taken"},
+      "must_contain": ["01040066", "01040166"],
+      "must_not_contain": [],
+      "stance": "deny",
+      "derivation": "prerequisite_edges where course = 01040174 returns 2 rows, both in group '01040174' -- ONE group, satisfied by ANY ONE of its members. The student has no transcript row for 01040066 at all, and their row for 01040166 (אלגברה אמ') carries grade 30, below the 55 pass mark. So 0 of 1 groups are met and the student is NOT eligible.",
+      "contested": false,
+      "trap": "This is the credits defect wearing different clothes, and it is the ONLY question here whose answer turns on the passing rule. Reading the transcript as 'courses taken' rather than 'courses passed' makes 01040166 satisfy the group and the answer flips to eligible -- which is the dangerous direction, since it tells a student to register for something they cannot take. Six courses flip this way on this transcript (00960200, 01040018, 01040033, 01040174, 01040193, 02380125); 01040174 is the cleanest because it has exactly one group with exactly two members.",
+      "ideal_answer": "No. 01040174 (אלגברה במ') needs either 01040066 or 01040166, and you have passed neither -- you took 01040166 but were graded 30, below the passing mark of 55, so it does not count. Passing either one would make you eligible."
+    },
+    {
+      "id": "forecast_00940412_spring",
+      "prompt": "Will 00940412 be offered next spring?",
+      "expected": {"offered": true, "spring_years": 3, "years_observed": 3, "cycle_rate": 1.0, "naive_rate": 0.43},
+      "must_contain": ["00940412"],
+      "must_not_contain": ["0.43"],
+      "stance": "affirm",
+      "derivation": "course_offerings for 00940412 (הסתברות מ) holds 7 rows spanning academic years 2023, 2024 and 2025, all status 'published': spring in 2023, 2024 and 2025; winter in 2024 and 2025; summer in 2024 and 2025. Spring occurred in 3 of the 3 years observed, so the recurrence rate is 3/3 = 1.00 and the course should be projected to run again. 7 observations clears forecast.MIN_OBSERVATIONS = 3.",
+      "contested": false,
+      "trap": "The documented inversion, live in this course's data. Counting spring offerings against ALL offerings gives 3/7 = 0.43 and forecasts 'will not run' -- for a course that has run every single spring on record. The wrong answer names the same course code as the right one, so `must_contain` cannot separate them; only `stance` can. This is why the tool requires `cycle_path`: without it the denominator is the number of offerings rather than the number of years, and the most reliably offered courses get the most pessimistic forecast.",
+      "note_on_scoring": "A run that answers 'I could not determine this' is scored wrong, not excused. The whole history is fetchable in one call -- 7 rows -- so an incomplete-history refusal means the run failed to fetch what was there.",
+      "ideal_answer": "Yes, almost certainly. 00940412 (הסתברות מ) has been offered in spring in every one of the three academic years on record (2023, 2024, 2025), so it should run again next spring. It also runs in winter and summer, so spring is not your only opportunity."
     }
   ]
 }
