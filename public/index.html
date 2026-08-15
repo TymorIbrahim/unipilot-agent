@@ -22,6 +22,10 @@
     }
   }
   * { box-sizing: border-box; }
+  /* An author-level `display` beats the UA stylesheet, so `hidden` alone does
+     not hide a grid or a flex container -- the insight panels rendered empty
+     before the first run without this. */
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
