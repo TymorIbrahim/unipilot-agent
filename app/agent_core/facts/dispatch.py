@@ -16,6 +16,7 @@ name themselves.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Union
@@ -120,6 +121,20 @@ async def dispatch(call: Mapping[str, Any], context: DispatchContext) -> Dispatc
                 0,
                 f"'{tool}' needs an 'as' naming its result, so later calls can refer to it. "
                 "(Only 'compute' is exempt -- its pipelines name themselves.)",
+            ),
+        )
+
+    unsubstituted = _slot_written_into_an_argument(args, context)
+    if unsubstituted:
+        slot, value = unsubstituted
+        return _defect(
+            name or "call",
+            ExpressionDefect(
+                0,
+                f"'{{{slot}}}' was written into a tool argument as text. Slots are filled in "
+                f"ANSWERS, never in arguments -- this reached the tool literally. To use the "
+                f'value, either write {{"fact": "{slot}"}} where a predicate takes a value, or '
+                f"type the value itself: {value!r}.",
             ),
         )
 
@@ -729,6 +744,51 @@ async def _plan_term(name: str, args: Mapping[str, Any], context: DispatchContex
         return _defect(name, DataDefect(0, f"the plan service could not build the plan: {error.detail}"))
 
     return _fact(name, _placed_collection(result), Basis.SIMULATED, derivation=_plan_summary(result))
+
+
+_SLOT_IN_TEXT = re.compile(r"\{(\w+)\}")
+
+
+def _slot_written_into_an_argument(
+    args: Any, context: DispatchContext
+) -> Union[tuple[str, Any], None]:
+    """A `{fact_name}` slot typed into a string argument, where nothing fills it.
+
+    Slot substitution belongs to the ANSWER. A tool argument is passed through
+    verbatim, so `{"query": "{program_slug} required courses"}` searches the
+    corpus for the characters "{program_slug}" and quietly returns whatever that
+    tokenises to.
+
+    Measured, live: a plan run did exactly this on its FIRST search. The query
+    matched four unrelated tracks, `extract_list` could not find the student's
+    own page among them, and the model spent NINE of its sixteen turns
+    re-searching -- because nothing told it the query it sent was not the query
+    it wrote. 116s became 194s on the same question.
+
+    Only reports a slot naming a fact actually held. Braces are ordinary
+    characters and a query may legitimately contain them; a name that resolves
+    is what makes this a mistake rather than a string.
+    """
+    if not context.facts:
+        return None
+    if isinstance(args, str):
+        for slot in _SLOT_IN_TEXT.findall(args):
+            held = context.facts.get(slot)
+            if held is not None:
+                return slot, getattr(held.value, "value", held.value)
+        return None
+    if isinstance(args, Mapping):
+        for value in args.values():
+            found = _slot_written_into_an_argument(value, context)
+            if found:
+                return found
+        return None
+    if isinstance(args, (list, tuple)):
+        for item in args:
+            found = _slot_written_into_an_argument(item, context)
+            if found:
+                return found
+    return None
 
 
 def _held_id(context: DispatchContext, fact_name: str) -> Union[str, None]:
