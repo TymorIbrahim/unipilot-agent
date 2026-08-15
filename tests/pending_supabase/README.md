@@ -20,6 +20,18 @@ ids as text, so the pass was deleted rather than translated. One check is new
 and could not exist against Mongo -- every declared field must be a real COLUMN,
 which is knowable up front in a database that has a schema.
 
+`test_predicate.py` is retired, split in two. Its cross-engine MATRIX -- the
+part this README called the reason to keep the file -- is
+`tests/reachability/test_predicate_engines.py`, run through `matches` and
+`compile_to_sql` against a real database. Its engine-free rules are
+`tests/agent_core/facts/test_predicate_semantics.py` in the fast suite: path
+resolution, the type rules, and the constant-true predicate. Nothing else
+asserted that a course code cannot be ORDERED, which a SQL engine will happily
+do byte-wise rather than refuse.
+
+`TestMongoCompilation` was deliberately NOT ported: it pinned `$nor` against
+field-level `$not` on a compiler that has been deleted.
+
 `test_find.py` is `tests/reachability/test_find_against_data.py`, marked
 `supabase` and green -- the Phase 5 gate (a truncated fetch reports
 `complete=false`, and an `aggregate` over it fails closed) now holds against
