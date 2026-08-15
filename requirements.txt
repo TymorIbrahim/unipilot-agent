@@ -6,12 +6,20 @@
 #   - networkx: the graph derivations (track_courses, prerequisite_edges) are
 #     materialised into Supabase at seed time, so nothing derives them at runtime.
 #   - motor/pymongo: Supabase is the primary store; there is no Mongo here.
+#
+# asyncpg reaches Postgres through Supabase's Supavisor pooler, NOT the direct
+# `db.<ref>.supabase.co` host -- that host publishes an AAAA record only, and
+# Vercel's runtime cannot route to it. The pooler is IPv4 and, being a pooler, is
+# also what keeps a per-invocation connection from exhausting Postgres' limit.
+# It is a real wire protocol rather than PostgREST because the predicate grammar
+# includes field-to-field comparison (`grade > passing`), which PostgREST cannot
+# express at all -- see `compile_to_sql`.
 fastapi==0.135.4
+asyncpg>=0.30,<0.31
 pydantic>=2.10.3
 pydantic-settings==2.6.1
 langchain-openai>=0.3.0
 langchain-core>=0.3.0
 pinecone>=9.1.0,<10
-supabase>=2.10.0
 httpx==0.28.1
 jsonschema>=4.21,<5

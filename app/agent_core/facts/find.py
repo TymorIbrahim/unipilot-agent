@@ -31,8 +31,9 @@ from app.agent_core.facts.operators import DataDefect, Defect, ExpressionDefect
 from app.agent_core.facts.predicate import (
     Always,
     Predicate,
+    _quote,
     collect_paths,
-    compile_to_mongo,
+    compile_to_sql,
     matches,
 )
 from app.agent_core.facts.types import (
@@ -103,14 +104,30 @@ class SourceSchema:
     """
 
     object_id_fields: frozenset[str] = frozenset()
-    """Identifier fields stored as BSON ObjectId rather than as strings.
+    """Identifier fields that were BSON ObjectIds in the original store.
 
-    Declared, because both read as `IDENTIFIER` and nothing in the value
-    distinguishes them. Without this, a filter like `userId = "6a5cfb..."`
-    compiles to a string comparison against an ObjectId, matches nothing, and
-    returns an EMPTY result marked complete -- a student with no transcript,
-    reported confidently. Silence is the worst failure this layer can produce,
-    so the mapping is explicit rather than guessed from the value's shape.
+    DESCRIPTIVE ONLY since the move to Postgres, and kept because it still tells
+    a reader which text columns hold 24-hex ids and therefore which joins are
+    id-to-id rather than code-to-code.
+
+    It used to be load-bearing: against Mongo, a filter like `userId =
+    "6a5cfb..."` compiled to a string compared against an ObjectId, matched
+    nothing, and returned an EMPTY result marked complete -- a student with no
+    transcript, reported confidently. Postgres stores these as `text`, so the
+    model's string filter compares against a string and the failure it guarded
+    against cannot occur. The binding pass that used it is gone rather than
+    disabled; a no-op that looks like a safeguard is worse than none.
+    """
+
+    order_tiebreak: tuple[str, ...] = ()
+    """Columns that break ties on `key`, where `key` is not unique.
+
+    Two declared keys are not unique in the real data: `completed_courses`
+    repeats a `courseId` across students and retakes, and `prerequisite_edges`
+    repeats an `edge` across OR-branches. `find` sorts by the key so a truncated
+    fetch returns the same PAGE every time -- and with ties, it does not. The
+    tie-break restores a total order, and naming it here keeps the fact that
+    these keys are non-unique visible instead of buried in a sort clause.
     """
 
 
@@ -161,21 +178,47 @@ async def find(
     if isinstance(schema, DerivedSchema):
         return _find_derived(schema, predicate, limit)
 
-    query = _bind_object_ids(compile_to_mongo(predicate), schema)
-    collection = database[schema.collection]
+    return await _find_stored(database, schema, predicate, limit)
 
-    # Counted against the same filter the fetch uses, so a filtered result can
-    # still be complete.
-    total = await collection.count_documents(query)
 
-    # A stable sort is not cosmetic: without one the PAGE varies between runs and
-    # every answer derived from it varies too.
-    cursor = collection.find(query).sort(schema.key, 1).limit(limit)
-    documents = [document async for document in cursor]
+_TOTAL = "__total"
+"""Column carrying the unlimited match count. Undeclared by every schema, so
+`_convert_fields` skips it -- it can never be mistaken for a fact."""
+
+
+async def _find_stored(
+    database: Any, schema: SourceSchema, predicate: Predicate, limit: int
+) -> Union[Collection, Defect]:
+    """One statement: the page AND the true total.
+
+    `count(*) over ()` is evaluated after `where` and before `limit`, so a single
+    round trip yields both the rows and the count they were drawn from. Two
+    queries would be two chances for the count and the page to describe different
+    states of the table -- and the whole point of `total` is that it is the truth
+    about the page in hand.
+
+    The count is measured against the PREDICATE, not the table, or every filtered
+    result would be permanently incomplete and no aggregate over one could run.
+    """
+    where, parameters = compile_to_sql(predicate, json_columns=_json_columns(schema))
+    order = ", ".join(_quote(column) for column in (schema.key, *schema.order_tiebreak))
+
+    sql = (
+        f'select *, count(*) over () as {_quote(_TOTAL)} '
+        f"from {_quote(schema.collection)} "
+        f"where {where} "
+        f"order by {order} "
+        f"limit ${len(parameters) + 1}"
+    )
+
+    rows = await database.fetch(sql, *parameters, limit)
+    # No rows means nothing matched, so the true total is zero -- and the result
+    # is COMPLETE. An empty page is not an incomplete one.
+    total = int(rows[0][_TOTAL]) if rows else 0
 
     records = []
-    for document in documents:
-        converted = _to_record(document, schema)
+    for row in rows:
+        converted = _to_record(row, schema)
         if isinstance(converted, DataDefect):
             return converted
         records.append(converted)
@@ -183,6 +226,17 @@ async def find(
     return Collection(
         records=tuple(records),
         completeness=Completeness(complete=len(records) == total, total=total),
+    )
+
+
+def _json_columns(schema: AnySchema) -> frozenset[str]:
+    """Top-level columns holding jsonb -- the array and sub-document fields.
+
+    `compile_to_sql` needs these to know that `semesters.order` is a path INSIDE
+    a document rather than a column literally named `semesters.order`.
+    """
+    return frozenset(
+        name for name, spec in schema.fields.items() if isinstance(spec, (ArrayOf, Sub))
     )
 
 
@@ -214,54 +268,6 @@ def _find_derived(
         records=kept,
         completeness=Completeness(complete=len(kept) == total, total=total),
     )
-
-
-def _bind_object_ids(query: Any, schema: SourceSchema) -> Any:
-    """Rewrite comparisons on ObjectId-backed fields to compare against ObjectIds.
-
-    A predicate arrives with string values, because that is what a model can
-    write. Comparing a string to a stored ObjectId matches nothing and reports
-    an empty result as COMPLETE -- so a student's whole transcript would come
-    back as "no records" with full confidence.
-
-    Walks the compiled filter rather than the predicate tree so it also covers
-    the operators the predicate grammar compiles into (`$in`, `$and`, ...).
-    """
-    from bson import ObjectId
-    from bson.errors import InvalidId
-
-    if not schema.object_id_fields:
-        return query
-
-    def convert(value: Any) -> Any:
-        if isinstance(value, str):
-            try:
-                return ObjectId(value)
-            except (InvalidId, TypeError):
-                # Not an ObjectId-shaped string. Left alone rather than
-                # rejected: the field may legitimately hold both during a
-                # migration, and a wrong value should return nothing, not raise.
-                return value
-        if isinstance(value, list):
-            return [convert(item) for item in value]
-        return value
-
-    def walk(node: Any, field: str | None = None) -> Any:
-        if isinstance(node, dict):
-            rewritten = {}
-            for key, value in node.items():
-                if key.startswith("$"):
-                    rewritten[key] = (
-                        [walk(item, field) for item in value]
-                        if isinstance(value, list) and key in ("$and", "$or", "$nor")
-                        else (convert(value) if field in schema.object_id_fields else walk(value, field))
-                    )
-                else:
-                    rewritten[key] = walk(value, key)
-            return rewritten
-        return node
-
-    return walk(query)
 
 
 def _to_record(document: Mapping[str, Any], schema: AnySchema) -> Union[Record, DataDefect]:

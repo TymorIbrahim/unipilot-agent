@@ -58,7 +58,22 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_key: str = Field(default="", repr=False)
 
+    # The Postgres DSN, which is a SEPARATE credential from the anon key above:
+    # the agent reads through the Postgres wire protocol, not PostgREST, because
+    # the predicate grammar includes field-to-field comparison and PostgREST
+    # cannot express it. Its HOST is rewritten to the pooler at connect time --
+    # `db.<ref>.supabase.co` is IPv6-only and unroutable from Vercel. See
+    # `app/db/postgres.py`.
+    supabase_db_url: str = Field(default="", repr=False)
+    supabase_pooler_host: str = "aws-0-us-east-1.pooler.supabase.com"
+    supabase_pooler_port: int = 6543
+
     # --- Pinecone (vector database) ----------------------------------------
+    # The semantic half of retrieval. It carries 60% of the ranking weight
+    # (`hybridVectorWeight` in the tuned profile), so a missing key is not a
+    # small degradation -- it drops the majority of the signal and leaves
+    # keyword-only ranking, which demonstrably surfaces the wrong page for
+    # verbose natural-language questions.
     pinecone_api_key: str = Field(default="", repr=False)
     pinecone_index_name: str = "unipilot-wiki"
 
@@ -91,10 +106,31 @@ class Settings(BaseSettings):
         return self.chat_provider() == "llmod" and self.llm_configured()
 
     def supabase_configured(self) -> bool:
-        return bool(self.supabase_url.strip() and self.supabase_key.strip())
+        """True when the agent can actually READ. The anon key is not enough --
+        it reaches PostgREST, which the data layer does not use."""
+        return bool(self.supabase_db_url.strip())
 
     def pinecone_configured(self) -> bool:
         return bool(self.pinecone_api_key.strip())
+
+    def embeddings_available(self) -> bool:
+        """Whether a query can be embedded at all.
+
+        Separate from `pinecone_configured`: the index and the embedder are two
+        different credentials, and having one without the other still means no
+        semantic search.
+        """
+        return bool(self.llm_embedding_api_key.strip() and self.llm_embedding_model.strip())
+
+    def vector_index_enabled(self) -> bool:
+        """The semantic half is only live when BOTH halves are.
+
+        Checked in one place because the failure is silent either way: a query
+        that cannot be embedded, or an index that cannot be reached, both return
+        zero candidates and leave a keyword-only ranking that still looks like a
+        working hybrid search.
+        """
+        return self.pinecone_configured() and self.embeddings_available()
 
     def effective_time_budget_s(self) -> float:
         """Never allow a configured budget to exceed the platform's own limit.

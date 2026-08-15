@@ -52,6 +52,11 @@ COMPLETED_COURSES = SourceSchema(
     # The one route from a transcript row to a course code.
     joins=(("courseId", "courses._id"),),
     object_id_fields=frozenset({"courseId", "userId"}),
+    # `courseId` repeats -- 70 duplicate groups live, from retakes and from one
+    # course appearing on several students' transcripts. `_id` is undeclared, so
+    # `find` never reads it as a fact; it exists purely to make the sort a total
+    # order, without which a truncated fetch returns a different PAGE each run.
+    order_tiebreak=("_id",),
 )
 
 SEMESTER_PLANS = SourceSchema(
@@ -122,7 +127,12 @@ COURSES = SourceSchema(
         "faculty": _I,
         "studyFramework": _I,
         "catalogYear": _Q,
-        "academicYear": _Q,
+        # NO academicYear: it was declared here and exists on 0 of 2,613 real
+        # course documents (measured 2026-08-14). A declaration nothing can
+        # satisfy is the same lie as a missing one -- the field would simply be
+        # absent on every record, and any aggregate over it fails closed for a
+        # reason that has nothing to do with the data. `course_offerings` is
+        # where an academic year actually lives.
         "status": _I,
     },
     basis=Basis.OFFICIAL_RECORD,
@@ -131,7 +141,13 @@ COURSES = SourceSchema(
 
 STUDENT_PROFILES = SourceSchema(
     collection="student_profiles",
-    key="institutionId",
+    # `userId`, not `institutionId`. The original key was a TENANT NAME: all 951
+    # live profiles share one of two values ('technion', 'uni-main'), so every
+    # profile had the same identity. `find` sorts by the key and `difference` /
+    # `join` treat it as identity, which made a multi-profile fetch both
+    # unordered and unable to tell two students apart. `userId` is unique per
+    # profile and is what every query filters on anyway.
+    key="userId",
     fields={
         "institutionId": _I,
         "userId": _I,
@@ -204,14 +220,70 @@ MOODLE_GRADES = SourceSchema(
     object_id_fields=frozenset({"_id", "userId"}),
 )
 
+PREREQUISITE_EDGES = SourceSchema(
+    collection="prerequisite_edges",
+    key="edge",
+    fields={
+        "edge": _I,
+        "course": _I,
+        "requires": _I,
+        "group": _I,
+    },
+    # Parsed out of catalog prose, not read from a registrar's record. Weaker
+    # than OFFICIAL_RECORD, and the basis ordering carries that into any answer
+    # built on it.
+    basis=Basis.WIKI_DERIVED,
+    # `course` and `requires` are course NUMBERS (00960211), not ObjectIds. A
+    # live eval filtered `course` by a course's `_id` and got nothing back --
+    # `completed_courses` keys courses by ObjectId while this keys them by
+    # number, and the model had no way to know the two differ.
+    joins=(("course", "courses.courseNumber"), ("requires", "courses.courseNumber")),
+    yields=frozenset({"edges"}),
+    # 566 of 4,766 edges repeat an `edge` id across OR-branches: one course can
+    # require another in two different alternative groups.
+    order_tiebreak=("group",),
+)
+
+TRACK_COURSES = SourceSchema(
+    collection="track_courses",
+    key="edge",
+    fields={
+        "edge": _I,
+        "track": _I,
+        "course": _I,
+    },
+    basis=Basis.WIKI_DERIVED,
+    # `course` is a course NUMBER; join to the catalog for credits and faculty.
+    joins=(("course", "courses.courseNumber"),),
+)
+
+# Both of the above were `DerivedSchema`s computed at runtime from a networkx
+# graph, and both are now ordinary tables -- materialised by `scripts/seed.py`.
+# Nothing about how the model reaches them changed: it is still
+# `{"tool": "find", "args": {"source": "prerequisite_edges"}}`. What changed is
+# that a cold start no longer builds a graph to answer it.
+#
+# They are in the REGISTRY rather than added by `wiring.build_wiring`, which is
+# the point: registration used to depend on a graph engine that this repo does
+# not contain, so the `try` around it silently succeeded at registering nothing
+# and `traverse` was advertised with no reachable input.
 REGISTRY: dict[str, SourceSchema] = {
+    "prerequisite_edges": PREREQUISITE_EDGES,
+    "track_courses": TRACK_COURSES,
     "course_offerings": COURSE_OFFERINGS,
     "completed_courses": COMPLETED_COURSES,
     "semester_plans": SEMESTER_PLANS,
     "courses": COURSES,
     "student_profiles": STUDENT_PROFILES,
     "degree_programs": DEGREE_PROGRAMS,
-    "moodle_grades": MOODLE_GRADES,
+    # NOT `moodle_grades`. It is operator-fed -- `services/operator` sweeps a
+    # student's live Moodle to write it -- and nothing in this deployment runs
+    # that sweep, so the table would be empty for every demo student. An empty
+    # source advertised to the model is worse than an absent one: "what did I
+    # score on assignment 2" comes back as a confident "no records" instead of
+    # "I cannot see that". It declares no `yields`, so dropping it costs no
+    # capability. The schema below is kept because it documents the one
+    # non-registrar basis the layer models.
 }
 
 
@@ -221,7 +293,9 @@ __all__ = [
     "COURSES",
     "DEGREE_PROGRAMS",
     "MOODLE_GRADES",
+    "PREREQUISITE_EDGES",
     "REGISTRY",
     "SEMESTER_PLANS",
     "STUDENT_PROFILES",
+    "TRACK_COURSES",
 ]

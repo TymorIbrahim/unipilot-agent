@@ -1,2 +1,11 @@
 pytest>=8.0
 -r requirements.txt
+
+# Seeding only -- `scripts/seed.py` reads the source records out of UniPilot's
+# Atlas cluster. Deliberately NOT in requirements.txt: the deployed agent has no
+# Mongo, and this must not ride into the Vercel bundle.
+#
+# `[srv]` pulls dnspython, without which the `mongodb+srv://` URI will not
+# resolve. Atlas also needs an explicit CA bundle from this venv --
+# `tlsCAFile=certifi.where()` -- or every connection fails verification.
+pymongo[srv]>=4.9
