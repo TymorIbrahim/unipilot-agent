@@ -56,38 +56,64 @@ class TestAudienceFilter:
 class TestAudienceResolution:
     """`programType` is the stored vocabulary; the corpus speaks in levels."""
 
-    async def test_bsc_resolves_to_undergraduate(self) -> None:
-        from app.agent_core.facts.service import _audience_of
+    def test_bsc_resolves_to_undergraduate(self) -> None:
+        from app.agent_core.facts.service import _audience_of_profile
+
+        assert _audience_of_profile({"programType": "BSc"}) == "undergraduate"
+
+    def test_msc_resolves_to_graduate(self) -> None:
+        from app.agent_core.facts.service import _audience_of_profile
+
+        assert _audience_of_profile({"programType": "MSc"}) == "graduate"
+
+    def test_an_unrecognised_type_leaves_the_corpus_unfiltered(self) -> None:
+        """Narrowing the corpus to nothing is worse than not narrowing it."""
+        from app.agent_core.facts.service import _audience_of_profile
+
+        assert _audience_of_profile({"programType": "Habilitation"}) == "undergraduate"
+        assert _audience_of_profile({"programType": None}) is None
+        assert _audience_of_profile(None) is None
+
+
+class TestTheStudentMustExist:
+    """An unknown student produced a confident zero.
+
+    Every `find` returns an empty collection, `sum` over empty is 0, and the run
+    answered "You have completed 0 credits" -- grounded in a real fetch, and
+    about nobody. Measured in production with student_id=nonexistent-student:
+    status ok, six steps, that answer.
+    """
+
+    async def test_a_known_student_is_returned(self) -> None:
+        from app.agent_core.facts.service import _profile_of
 
         class _Db:
-            async def fetchval(self, *_: object) -> str:
-                return "BSc"
+            async def fetch(self, *_: object) -> list:
+                return [{"userId": "u1", "programType": "BSc"}]
 
-        assert await _audience_of(_Db(), "u1") == "undergraduate"
+        profile = await _profile_of(_Db(), "u1")
+        assert profile["programType"] == "BSc"
 
-    async def test_msc_resolves_to_graduate(self) -> None:
-        from app.agent_core.facts.service import _audience_of
-
-        class _Db:
-            async def fetchval(self, *_: object) -> str:
-                return "MSc"
-
-        assert await _audience_of(_Db(), "u1") == "graduate"
-
-    async def test_a_missing_profile_leaves_the_corpus_unfiltered(self) -> None:
-        from app.agent_core.facts.service import _audience_of
+    async def test_an_unknown_student_is_none(self) -> None:
+        from app.agent_core.facts.service import _profile_of
 
         class _Db:
-            async def fetchval(self, *_: object) -> None:
-                return None
+            async def fetch(self, *_: object) -> list:
+                return []
 
-        assert await _audience_of(_Db(), "u1") is None
+        assert await _profile_of(_Db(), "ghost") is None
 
-    async def test_an_unreadable_profile_does_not_end_the_run(self) -> None:
-        from app.agent_core.facts.service import _audience_of
+    async def test_a_failed_read_is_not_reported_as_no_such_student(self) -> None:
+        """A database outage reported as "no such student" is the same
+        confident-wrong-answer failure wearing a different hat, so the error
+        propagates instead of being flattened into None."""
+        import pytest
+
+        from app.agent_core.facts.service import _profile_of
 
         class _Db:
-            async def fetchval(self, *_: object) -> str:
+            async def fetch(self, *_: object) -> list:
                 raise RuntimeError("connection reset")
 
-        assert await _audience_of(_Db(), "u1") is None
+        with pytest.raises(RuntimeError):
+            await _profile_of(_Db(), "u1")

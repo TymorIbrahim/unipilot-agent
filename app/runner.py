@@ -141,6 +141,15 @@ def _error_for(result: Any) -> str:
     `response`, and `error` exists to tell whoever is reading the trace which
     budget or guard stopped the run.
     """
+    from app.agent_core.facts.service import UNKNOWN_STUDENT
+
+    reason = str(getattr(result, "reason", "") or "")
+    if reason.startswith(UNKNOWN_STUDENT):
+        # A caller naming a student who does not exist is a client mistake with
+        # a precise cause, not a diagnostic to be summarised away. Forwarded
+        # verbatim for the same reason "prompt is empty" is.
+        return reason
+
     reasons = {
         "refused": "the answer could not be grounded in the student's records",
         "stalled": "the agent stopped making progress before reaching an answer",

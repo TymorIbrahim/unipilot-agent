@@ -104,8 +104,26 @@ async def run_advice(
         return LoopResult(outcome="exhausted", reason="no language model is configured")
 
     database = await get_database()
+
+    profile = await _profile_of(database, user_id)
+    if profile is None:
+        # The failure this whole layer exists to prevent, arriving through the
+        # one door nothing guarded. An unknown student has no transcript, so
+        # every `find` returns an empty collection, `sum` over empty is 0, and
+        # the run answers "You have completed 0 credits" -- confident, grounded
+        # in a real (empty) fetch, and about nobody. Measured in production with
+        # student_id=nonexistent-student: status ok, six steps, that answer.
+        #
+        # Checked once here rather than defended against downstream, because
+        # every tool would have to know, and any that forgot would produce the
+        # same confident zero.
+        return LoopResult(
+            outcome="refused",
+            reason=f"{UNKNOWN_STUDENT}: {user_id!r} has no record, so there is nothing to answer from",
+        )
+
     context = build_context(
-        database, settings, await _audience_of(database, user_id), **_extractor_override(chat)
+        database, settings, _audience_of_profile(profile), **_extractor_override(chat)
     )
     context.facts["me"] = HeldFact(
         value=Scalar(ScalarKind.IDENTIFIER, user_id),
@@ -140,30 +158,51 @@ async def run_advice(
     return result
 
 
+UNKNOWN_STUDENT = "no student record"
+"""Marks a refusal caused by the CALLER naming a student who does not exist.
+
+Shared with `runner._error_for`, which otherwise summarises a refusal into one
+generic sentence to avoid leaking developer diagnostics. This one is not a
+diagnostic -- it is a client mistake with a precise cause, like an empty prompt
+-- and a caller who mistypes an id deserves to be told that rather than
+"the answer could not be grounded in the student's records".
+"""
+
 _GRADUATE_PROGRAM_TYPES = frozenset({"msc", "ma", "phd", "me", "meng", "mba"})
 
 
-async def _audience_of(database: Any, user_id: str) -> str | None:
+async def _profile_of(database: Any, user_id: str) -> Any:
+    """The student's profile row, or None if there is no such student.
+
+    One query, serving two purposes: proving the student EXISTS before a run
+    starts, and carrying the degree level retrieval needs. Both were previously
+    unasked -- the level not at all, and the existence never.
+
+    A read that FAILS is not the same as a student who does not exist, so an
+    error propagates rather than returning None: a database outage reported as
+    "no such student" is the confident-wrong-answer failure wearing a different
+    hat.
+    """
+    rows = await database.fetch(
+        'select "userId", "programType" from student_profiles where "userId" = $1', user_id
+    )
+    return rows[0] if rows else None
+
+
+def _audience_of_profile(profile: Any) -> str | None:
     """The student's degree level, so retrieval never quotes the wrong rulebook.
 
-    One extra query per request, deliberately: the Technion's undergraduate and
-    graduate regulations both answer "what is the English requirement", and a
-    live BSc student was told "All graduate students must demonstrate English
-    proficiency" because the graduate page out-ranked the undergraduate one.
-    Nothing downstream could catch that -- the quote was faithful and the
-    citation real -- so the level has to be known BEFORE the corpus is searched.
+    The Technion's undergraduate and graduate regulations both answer "what is
+    the English requirement", and a live BSc student was told "All graduate
+    students must demonstrate English proficiency" because the graduate page
+    out-ranked the undergraduate one. Nothing downstream could catch that -- the
+    quote was faithful and the citation real -- so the level has to be known
+    BEFORE the corpus is searched.
 
-    Returns None when the profile is missing or the type is unrecognised, which
-    leaves retrieval unfiltered. An unknown level must not silently narrow the
-    corpus to nothing.
+    Returns None for an unrecognised programType, which leaves retrieval
+    unfiltered. An unknown level must not silently narrow the corpus to nothing.
     """
-    try:
-        program_type = await database.fetchval(
-            'select "programType" from student_profiles where "userId" = $1', user_id
-        )
-    except Exception:  # noqa: BLE001 -- an unreadable profile is an unknown level
-        logger.warning("could not read programType for %s; corpus stays unfiltered", user_id)
-        return None
+    program_type = profile["programType"] if profile is not None else None
     if not program_type:
         return None
     return "graduate" if str(program_type).strip().lower() in _GRADUATE_PROGRAM_TYPES else "undergraduate"
