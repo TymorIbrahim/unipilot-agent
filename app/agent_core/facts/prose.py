@@ -84,8 +84,8 @@ class Extractor(Protocol):
     ) -> Any: ...
 
 
-def _appears_in(raw: Any, quote: str) -> bool:
-    """Is the extracted value actually present in the text it cites?
+def _appears_in(raw: Any, source_text: str) -> bool:
+    """Is the extracted value actually present in the SOURCE text?
 
     This is the only enforceable guard against interpretation COMPUTING rather
     than reading. Pattern-matching for arithmetic does not work: an unevaluated
@@ -93,11 +93,18 @@ def _appears_in(raw: Any, quote: str) -> bool:
     nothing, while the failure that matters -- a model that quietly computes
     92.5 and returns a clean number -- looks identical to a real extraction.
 
-    Requiring the value to appear in the cited text catches exactly that: a
-    computed number is not in the passage it claims to come from. It also makes
-    the citation load-bearing rather than decorative.
+    Requiring the value to appear in the passage catches exactly that: a
+    computed number is not in the text it claims to come from.
+
+    `source_text` must be the PASSAGE, never the model's own quote. Checking a
+    value against the quote that came back with it is circular -- the model
+    supplies both the claim and its evidence -- and it was: given the invented
+    code 00999999 with the invented quote "00999999 is approved", against a
+    passage that never mentions it, `extract_list` kept the value. The quote
+    remains in the citation so a reader can see what was claimed; it is no
+    longer what decides whether the value is real.
     """
-    text = quote.replace(",", "")
+    text = source_text.replace(",", "")
     candidate = str(raw).strip().replace(",", "")
     if candidate in text:
         return True
@@ -155,12 +162,11 @@ async def interpret(
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return _cannot_determine(passage, question, expect, why="it contains no such value")
 
-    cited = quote or passage.excerpt
-    if not _appears_in(raw, cited):
+    if not _appears_in(raw, passage.excerpt):
         return DataDefect(
             0,
-            f"interpretation of '{passage.slug}' returned {raw!r}, which does not appear in the text "
-            f"it cites ({cited!r}). Interpretation EXTRACTS; a value that is not in the passage was "
+            f"interpretation of '{passage.slug}' returned {raw!r}, which does not appear in the "
+            f"passage. Interpretation EXTRACTS; a value that is not in the passage was "
             "computed or inferred, and arithmetic belongs to the algebra where operands are grounded "
             "in refs and the result can be audited.",
         )
@@ -206,7 +212,7 @@ async def interpret_list(
     for raw, quote in items or ():
         if raw is None or (isinstance(raw, str) and not raw.strip()):
             continue
-        if not _appears_in(raw, quote or passage.excerpt):
+        if not _appears_in(raw, passage.excerpt):
             continue
         value = _as_kind(raw, expect)
         if value is None or value in seen:
