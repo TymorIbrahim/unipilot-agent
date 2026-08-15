@@ -48,7 +48,9 @@ class AgentResult:
     steps: list[dict[str, Any]] = field(default_factory=list)
 
 
-async def run_agent(prompt: str, *, student_id: str | None = None) -> AgentResult:
+async def run_agent(
+    prompt: str, *, student_id: str | None = None, conversation_id: str | None = None
+) -> AgentResult:
     """Run one request end to end and return its answer plus its full trace."""
     from app.agent_core.facts.service import run_advice, to_advice
     from app.agent_core.reasoning.llm_client import build_chat_llm
@@ -89,6 +91,7 @@ async def run_agent(prompt: str, *, student_id: str | None = None) -> AgentResul
             settings=settings,
             time_budget_s=settings.effective_time_budget_s(),
             chat=traced,
+            conversation_id=conversation_id,
         )
     except Exception as error:  # noqa: BLE001 -- reported, never raised past here
         # The steps recorded BEFORE the failure are kept. A trace that stops

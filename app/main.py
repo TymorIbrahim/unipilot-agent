@@ -43,6 +43,13 @@ class ExecuteRequest(BaseModel):
     # absent we fall back to the primary demo student so a bare `{"prompt": ...}`
     # still works exactly as the spec describes.
     student_id: str | None = None
+    # Also optional, and for the same reason: the spec's `{prompt}` has no way
+    # to say "this continues what we were just talking about". Without it a
+    # follow-up like "yes, continue" has no referent, and the conversation
+    # store -- which exists and is wired into the reasoning core -- was
+    # unreachable from the one endpoint that could use it. Absent means a
+    # one-shot request, exactly as the spec describes.
+    conversation_id: str | None = None
 
 
 def _execute_response(
@@ -92,7 +99,11 @@ async def post_execute(payload: ExecuteRequest) -> dict[str, Any]:
     try:
         from app.runner import run_agent
 
-        result = await run_agent(payload.prompt, student_id=payload.student_id)
+        result = await run_agent(
+            payload.prompt,
+            student_id=payload.student_id,
+            conversation_id=payload.conversation_id,
+        )
     except Exception as error:  # noqa: BLE001 -- see module docstring
         logger.exception("execute_failed")
         return _execute_response(

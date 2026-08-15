@@ -155,6 +155,22 @@ function renderSteps(steps) {
   });
 }
 
+// One thread per browser tab, per student. Scoped to the student because the
+// server keys history on `student:thread` and switching students mid-session
+// should start a fresh conversation rather than inherit someone else's.
+// sessionStorage, not localStorage: a reload continues the thread, a new tab
+// starts a clean one, which is what a demo wants.
+function threadId() {
+  const student = selectEl.value || "default";
+  const key = `unipilot-thread:${student}`;
+  let id = sessionStorage.getItem(key);
+  if (!id) {
+    id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    sessionStorage.setItem(key, id);
+  }
+  return id;
+}
+
 async function run() {
   const prompt = $("prompt").value.trim();
   if (!prompt) { $("prompt").focus(); return; }
@@ -171,7 +187,7 @@ async function run() {
     const res = await fetch("/api/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, student_id: selectEl.value }),
+      body: JSON.stringify({ prompt, student_id: selectEl.value, conversation_id: threadId() }),
     });
     const data = await res.json();
     const secs = Math.round((Date.now() - started) / 1000);

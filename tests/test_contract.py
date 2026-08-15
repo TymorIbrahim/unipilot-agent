@@ -40,11 +40,13 @@ def stub_agent(monkeypatch: pytest.MonkeyPatch):
     """
     import app.runner
 
-    async def _fake(prompt: str, *, student_id: str | None = None):
+    async def _fake(prompt: str, *, student_id: str | None = None, conversation_id: str | None = None):
+        _fake.seen = {"prompt": prompt, "student_id": student_id, "conversation_id": conversation_id}
         return app.runner.AgentResult(
             ok=True, answer="stubbed", error=None, steps=[]
         )
 
+    _fake.seen = {}
     monkeypatch.setattr(app.runner, "run_agent", _fake)
     return _fake
 
@@ -129,6 +131,27 @@ def test_execute_accepts_a_bare_prompt_without_a_student(client: TestClient, stu
     assert set(response.json()) == EXECUTE_KEYS
 
 
+def test_execute_threads_a_conversation_id_to_the_core(client: TestClient, stub_agent) -> None:
+    """The conversation store was built, wired into the reasoning core, and then
+    unreachable: this endpoint never passed an id, so every request started with
+    no history and a follow-up like "yes, continue" had nothing to continue."""
+    response = client.post(
+        "/api/execute", json={"prompt": "yes, continue", "conversation_id": "thread-1"}
+    )
+
+    assert response.status_code == 200
+    assert stub_agent.seen["conversation_id"] == "thread-1"
+
+
+def test_execute_without_a_conversation_id_is_still_one_shot(
+    client: TestClient, stub_agent
+) -> None:
+    """The spec's `{prompt}` alone must keep working exactly as before."""
+    client.post("/api/execute", json={"prompt": "what is my GPA?"})
+
+    assert stub_agent.seen["conversation_id"] is None
+
+
 def test_execute_reports_a_failed_run_in_the_same_four_fields(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -140,7 +163,7 @@ def test_execute_reports_a_failed_run_in_the_same_four_fields(
     """
     import app.runner
 
-    async def _explode(prompt: str, *, student_id: str | None = None):
+    async def _explode(prompt: str, **_: object):
         raise RuntimeError("core exploded")
 
     monkeypatch.setattr(app.runner, "run_agent", _explode)
