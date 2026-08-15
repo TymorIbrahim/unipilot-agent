@@ -92,7 +92,14 @@ Reply with JSON only, in one of three shapes:
   {"decline": "why this is not something you can answer"}
 
 A slot renders its fact: a scalar prints its value; a collection `{name}` lists
-one readable field per record; `{name:count}` prints how many. `{name:detail}`
+one readable field per record; `{name:count}` prints how many.
+
+A TRUE/FALSE fact renders as the bare word "yes" or "no", so do not write the
+word yourself as well: "Yes -- {eligible}." comes out as "Yes -- yes.", and
+"You are {eligible} eligible" as "You are yes eligible". Either lead with the
+slot ("{eligible} -- you meet 1 of 1 prerequisite groups") or state it in your
+own words and slot the COUNTS instead. Only numbers are required to be slots;
+a yes/no you have derived can simply be said. `{name:detail}`
 prints one line PER record showing ALL its fields as "label value", under
 whatever names you `project`ed them to -- this is how you show a TABLE (a
 semester plan, a per-course breakdown with credits and grades), not just a list

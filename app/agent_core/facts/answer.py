@@ -284,7 +284,7 @@ def resolve_answer(
 
     consumed = [facts[name] for name in used]
     return Answer(
-        text=filled,
+        text=_tidy_affirmations(filled),
         basis=weakest([held.basis for held in consumed]),
         used=tuple(dict.fromkeys(used)),
         citations=tuple(held.citation for held in consumed if held.citation is not None),
@@ -294,6 +294,29 @@ def resolve_answer(
             if facts[name].derivation
         ),
     )
+
+
+_DOUBLED_YES = re.compile(r"\b(yes|no)\b([\s,;:.—–-]+)\b\1\b", re.IGNORECASE)
+_STRANDED_YES = re.compile(r"\b(are|is|am|was|were)\s+(yes|no)\s+(?=[a-z])", re.IGNORECASE)
+
+
+def _tidy_affirmations(text: str) -> str:
+    """Repair the two ways a true/false slot lands badly in a sentence.
+
+    A BOOL fact renders as the bare word "yes" or "no", which reads correctly on
+    its own ("Eligible: yes.") and badly when the model also writes the word --
+    "Yes -- {eligible}." becomes "Yes -- yes.", and "You are {eligible} eligible"
+    becomes "You are yes eligible". Measured on the eligibility question, roughly
+    a third of otherwise-correct answers came out one of those two ways.
+
+    The prompt asks for neither, and mostly gets its way; this catches the rest.
+    It is deliberately narrow -- an adjacent duplicate, or a yes/no stranded
+    between a copula and an adjective -- because it edits an answer that already
+    passed grounding, and the one thing it must never do is change what the
+    answer CLAIMS. Both rewrites drop a redundant word and touch nothing else.
+    """
+    tidied = _DOUBLED_YES.sub(lambda m: m.group(1), text)
+    return _STRANDED_YES.sub(lambda m: f"{m.group(1)} ", tidied)
 
 
 def _is_empty(value: Union[Collection, Scalar]) -> bool:
