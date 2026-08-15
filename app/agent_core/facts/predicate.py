@@ -51,15 +51,6 @@ _ORDERING_OPS = frozenset({Op.LT, Op.LE, Op.GT, Op.GE})
 # have no order -- and permitting it invites summing them next.
 _ORDERABLE_KINDS = frozenset({ScalarKind.QUANTITY, ScalarKind.DATE})
 
-_MONGO_OPS = {
-    Op.EQ: "$eq",
-    Op.NE: "$ne",
-    Op.LT: "$lt",
-    Op.LE: "$lte",
-    Op.GT: "$gt",
-    Op.GE: "$gte",
-}
-
 _EXPR_OPS = {Op.EQ: "$eq", Op.NE: "$ne", Op.LT: "$lt", Op.LE: "$lte", Op.GT: "$gt", Op.GE: "$gte"}
 
 MISSING = object()
@@ -273,41 +264,12 @@ def _compare(left: Any, op: Op, right: Any) -> bool:
         return False
 
 
-def compile_to_mongo(predicate: Predicate) -> dict[str, Any]:
-    """Compile to a Mongo filter document.
-
-    Structural only: operator names come from a fixed table and values are
-    carried through as data, so nothing the model writes can become a query
-    operator.
-    """
-    if isinstance(predicate, Always):
-        return {}
-    if isinstance(predicate, And):
-        return {"$and": [compile_to_mongo(term) for term in predicate.terms]}
-    if isinstance(predicate, Or):
-        return {"$or": [compile_to_mongo(term) for term in predicate.terms]}
-    if isinstance(predicate, Not):
-        # `$not` is field-scoped and cannot negate a composite expression;
-        # `$nor` over a single term is expression-level negation.
-        return {"$nor": [compile_to_mongo(predicate.term)]}
-
-    field = predicate.path.dotted
-
-    if predicate.op is Op.IN:
-        assert isinstance(predicate.value, tuple)
-        return {field: {"$in": [_raw(item) for item in predicate.value]}}
-
-    if predicate.op is Op.CONTAINS:
-        # Mongo matches an array field against a scalar by membership, so plain
-        # equality IS containment here. Deliberately not a regex: compiling
-        # model-supplied text into a pattern is both an injection surface and a
-        # divergence from the in-memory engine, so text-contains is excluded.
-        return {field: {"$eq": _raw(predicate.value)}}
-
-    if isinstance(predicate.value, Path):
-        return {"$expr": {_EXPR_OPS[predicate.op]: [f"${field}", f"${predicate.value.dotted}"]}}
-
-    return {field: {_MONGO_OPS[predicate.op]: _raw(predicate.value)}}
+def _quote(identifier: str) -> str:
+    """A SQL identifier, quoted. Column names are the DECLARED FIELD NAMES, which
+    are camelCase and include `_id` and the reserved word `group`, so quoting is
+    not optional. `find` has already checked every path against the schema before
+    this runs, but the escape stays anyway -- defence that costs nothing."""
+    return '"' + identifier.replace('"', '""') + '"'
 
 
 _SQL_OPS = {Op.EQ: "=", Op.NE: "<>", Op.LT: "<", Op.LE: "<=", Op.GT: ">", Op.GE: ">="}
@@ -315,14 +277,6 @@ _SQL_OPS = {Op.EQ: "=", Op.NE: "<>", Op.LT: "<", Op.LE: "<=", Op.GT: ">", Op.GE:
 # jsonpath spells its comparisons differently from SQL, and only these six are
 # emitted -- the table is fixed so nothing a model writes can become an operator.
 _JSONPATH_OPS = {Op.EQ: "==", Op.NE: "!=", Op.LT: "<", Op.LE: "<=", Op.GT: ">", Op.GE: ">="}
-
-
-def _quote(identifier: str) -> str:
-    """A SQL identifier, quoted. Column names are the DECLARED FIELD NAMES, which
-    are camelCase and include `_id` and the reserved word `group`, so quoting is
-    not optional. `find` has already checked every path against the schema before
-    this runs, but the escape stays anyway -- defence that costs nothing."""
-    return '"' + identifier.replace('"', '""') + '"'
 
 
 def compile_to_sql(
@@ -333,7 +287,7 @@ def compile_to_sql(
 ) -> tuple[str, list[Any]]:
     """Compile to a Postgres boolean expression plus its bound parameters.
 
-    Structural, exactly like `compile_to_mongo`: operator names come from a fixed
+    Structural: operator names come from a fixed
     table and every value leaves as a `$n` PARAMETER, never as text spliced into
     the statement. Nothing the model writes can become SQL.
 
@@ -463,7 +417,6 @@ __all__ = [
     "Predicate",
     "PredicateTypeError",
     "collect_paths",
-    "compile_to_mongo",
     "compile_to_sql",
     "matches",
     "validate",

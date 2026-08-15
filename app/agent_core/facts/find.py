@@ -259,9 +259,9 @@ def _find_derived(
     """The same contract as a stored fetch: typed, sorted, honestly counted.
 
     The predicate runs in memory here rather than being pushed down. That is
-    not a second semantics -- `matches` and `compile_to_mongo` are two engines
-    for ONE grammar, and `test_predicate.py` holds them to identical results
-    across the shared matrix.
+    not a second semantics -- `matches` and `compile_to_sql` are two engines for
+    ONE grammar, and `tests/reachability/test_predicate_engines.py` holds them to
+    identical results across a shared matrix, against the real database.
     """
     records = []
     for document in schema.produce():
