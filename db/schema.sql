@@ -170,6 +170,29 @@ create table if not exists completed_courses (
     "source"         text
 );
 
+-- `creditsEarned` cannot be summed to get credits toward the degree, and the
+-- data is what proves it: course 01040166 is graded 30 -- a fail -- and still
+-- carries its full 5.5. The field is otherwise a genuine earned-credit column
+-- (03240053 has catalog credits 3.0 and `creditsEarned` 0.0 because it was
+-- failed), so that one row contradicts both the regulation and the rest of the
+-- transcript. Summing it told a live student 135 credits when the answer is
+-- 129.5.
+--
+-- The rule is not the model's to remember. `concepts/regulations-undergraduate.md`
+-- § Grading: "Passing grade: 55 or above / Below 55 = failing", and 3.1.3(d)
+-- requires a failed mandatory course to be re-taken -- so it has earned nothing.
+-- GENERATED means the arithmetic happens in the database and no caller, model or
+-- otherwise, can reach for the raw field by accident and be wrong.
+alter table completed_courses
+    add column if not exists "creditsCounted" double precision
+    generated always as (
+        case when "grade" >= 55 then coalesce("creditsEarned", 0) else 0 end
+    ) stored;
+
+alter table completed_courses
+    add column if not exists "passed" boolean
+    generated always as ("grade" >= 55) stored;
+
 create index if not exists completed_courses_user_idx on completed_courses ("userId");
 create index if not exists completed_courses_course_idx on completed_courses ("courseId");
 

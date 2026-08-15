@@ -31,6 +31,7 @@ from app.agent_core.facts.types import Basis, ScalarKind
 _Q = ScalarKind.QUANTITY
 _I = ScalarKind.IDENTIFIER
 _T = ScalarKind.TEXT
+_B = ScalarKind.BOOL
 
 COMPLETED_COURSES = SourceSchema(
     collection="completed_courses",
@@ -43,10 +44,24 @@ COMPLETED_COURSES = SourceSchema(
         "grade": _Q,
         "gradePoints": _Q,
         "creditsEarned": _Q,
+        # Generated in Postgres, not stored upstream -- see db/schema.sql. A
+        # failed course earns nothing, and `creditsEarned` does not always say
+        # so: one live row is graded 30 and still carries its full 5.5.
+        "creditsCounted": _Q,
+        "passed": _B,
         "attempt": _Q,
         "source": _I,
         # NO courseNumber: it is not stored here. Reaching a course code means
         # joining to `courses` on courseId = _id.
+    },
+    field_notes={
+        "creditsCounted": (
+            "credits that COUNT toward the degree -- `creditsEarned` when the course was "
+            "passed, else 0. SUM THIS for 'how many credits have I completed'. Summing "
+            "`creditsEarned` instead counts courses the student FAILED and overstates the total."
+        ),
+        "passed": "false when the grade is below 55, the pass mark. A failed course must be re-taken.",
+        "creditsEarned": "as recorded by the registrar, INCLUDING some failed courses. Rarely what a question means.",
     },
     basis=Basis.OFFICIAL_RECORD,
     # The one route from a transcript row to a course code.

@@ -374,6 +374,11 @@ def _render_sources(context: DispatchContext) -> str:
         lines.append(f"  {name}\n     key: {schema.key}\n     fields: {fields}")
         for local, foreign in getattr(schema, "joins", ()):
             lines.append(f"     joins: {local} -> {foreign}")
+        # Rendered HERE, next to the field it qualifies, because this is where
+        # the column gets chosen. The same warning in a prompt paragraph did not
+        # stop a live run summing `creditsEarned` over failed courses.
+        for field, note in sorted(getattr(schema, "field_notes", {}).items()):
+            lines.append(f"     ! {field}: {note}")
 
     # Nested paths are listed in full for the same reason the source names are:
     # a field the model cannot see is a field it will guess at. Listing only

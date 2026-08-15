@@ -25,6 +25,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from numbers import Number
+from types import MappingProxyType
 from typing import Any, Union
 
 from app.agent_core.facts.operators import DataDefect, Defect, ExpressionDefect
@@ -91,6 +92,18 @@ class SourceSchema:
     repeatedly projected `courseId` under the name `courseCode` instead, which
     is precisely the fact-naming lie the system prompt warns about: the value is
     a real ObjectId and the name says course code.
+    """
+
+    field_notes: Mapping[str, str] = MappingProxyType({})
+    """Per-field warnings, for fields whose NAME does not tell the whole truth.
+
+    Added for `creditsEarned`, which reads like the credits a student earned and
+    is not: it carries the full value of a course graded 30. A model summing the
+    obvious-looking field told a live student 135 credits when the answer was
+    129.5, and no type or predicate check could have caught it -- the number was
+    real, official, and from the right column. The only place a warning helps is
+    where the model CHOOSES the column, so these render beside the field list
+    rather than in a prompt paragraph nobody re-reads.
     """
 
     yields: frozenset[str] = frozenset()
