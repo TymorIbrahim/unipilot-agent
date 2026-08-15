@@ -13,12 +13,15 @@ something can feed it.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
 from app.agent_core.facts.find import DerivedSchema
 from app.agent_core.facts.prose import Passage
 from app.agent_core.facts.types import Basis, ScalarKind
+
+logger = logging.getLogger(__name__)
 
 
 class WikiRetriever:
@@ -98,6 +101,22 @@ PASSAGE (%s):
 QUESTION: %s"""
 
 
+def _stamped(chat: Any, module: Any) -> Any:
+    """The same client, labelled with the module that is about to use it.
+
+    `extract` and `extract_all` are two of the agent's three model call sites and
+    they are DIFFERENT modules -- Interpreter and ListInterpreter -- so a single
+    label on the client would file both under one name and misreport the trace.
+    Stamping happens here, at the call site, because that is the only place that
+    knows which of the two is running.
+
+    A plain client has no `for_module`, and then this is a no-op: nothing about
+    extraction depends on being traced.
+    """
+    stamp = getattr(chat, "for_module", None)
+    return stamp(module) if callable(stamp) else chat
+
+
 class ModelExtractor:
     """Adapts a chat model to `interpret`'s extraction contract.
 
@@ -119,7 +138,9 @@ class ModelExtractor:
             passage.excerpt,
             question,
         )
-        reply = await self._chat.ainvoke([{"role": "user", "content": prompt}])
+        from app.tracing.modules import INTERPRETER
+
+        reply = await _stamped(self._chat, INTERPRETER).ainvoke([{"role": "user", "content": prompt}])
         payload = extract_reply(getattr(reply, "content", reply))
         if not isinstance(payload, dict) or "value" not in payload:
             # `extract_reply` only keeps loop-shaped replies, so parse the raw
@@ -142,7 +163,11 @@ class ModelExtractor:
             passage.excerpt,
             question,
         )
-        reply = await self._chat.ainvoke([{"role": "user", "content": prompt}])
+        from app.tracing.modules import LIST_INTERPRETER
+
+        reply = await _stamped(self._chat, LIST_INTERPRETER).ainvoke(
+            [{"role": "user", "content": prompt}]
+        )
         payload = _loose_json(getattr(reply, "content", reply))
         items = payload.get("items")
         if not isinstance(items, list):
@@ -314,21 +339,25 @@ def build_wiring(settings: Any | None = None) -> dict[str, Any]:
     """
     wiring: dict[str, Any] = {"sources": {}}
 
+    # The corpus comes from the precomputed artifact, not from a graph engine
+    # holding 2,753 files. `prerequisite_edges` and `track_courses` are no longer
+    # registered here either -- they are materialised tables in `REGISTRY` now.
+    #
+    # What used to be here was an import of `app.retrieval.graph_engine`, a
+    # package this repo does not contain, inside a bare `except: pass`. It
+    # silently succeeded at wiring NOTHING: no retriever, so `search_corpus`,
+    # `interpret` and `extract_list` went unadvertised on every run, and no
+    # derived sources, so `traverse` had no reachable input. A swallowed
+    # ImportError is indistinguishable from a deliberate absence, which is
+    # exactly why this one survived the port unnoticed.
     try:
-        from app.retrieval.graph_engine.graph_registry import graph_registry
+        from app.retrieval.corpus import build_retriever
 
-        engine = graph_registry.get_engine(settings)
-        if engine is not None:
-            wiring["retriever"] = WikiRetriever(engine)
-            wiring["engine"] = engine
-            # Only once the graph is BUILT does it hold prerequisite ASTs. An
-            # unbuilt engine would produce zero edges and report them complete,
-            # which is the confident-silence failure in miniature.
-            if getattr(engine, "_built", False):
-                wiring["sources"]["prerequisite_edges"] = prerequisite_edges_source(engine)
-                wiring["sources"]["track_courses"] = curriculum_source(engine)
-    except Exception:  # noqa: BLE001 -- unconfigured corpus is a missing capability
-        pass
+        retriever = build_retriever(settings=settings)
+        if retriever is not None:
+            wiring["retriever"] = retriever
+    except Exception:  # noqa: BLE001 -- an unavailable corpus is a missing capability
+        logger.exception("wiki corpus could not be wired; prose tools will not be advertised")
 
     try:
         from app.agent_core.reasoning.llm_client import build_chat_llm
