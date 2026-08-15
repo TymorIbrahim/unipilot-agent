@@ -632,6 +632,21 @@ async def _optimize(name: str, args: Mapping[str, Any], context: DispatchContext
 
 async def _propose(name: str, args: Mapping[str, Any], context: DispatchContext) -> Dispatched:
     grounds = tuple(args.get("grounds", ()))
+    if not grounds:
+        # Checked HERE as well as in `propose`, because the basis below is
+        # `min()` over the grounds and arguments evaluate before the call --
+        # so an empty `grounds` raised "min() iterable argument is empty" and
+        # that, not the written explanation, is what reached the model. A defect
+        # message is the model's only route to recovering from its own mistake,
+        # and Python internals tell it nothing it can act on.
+        return _defect(
+            name,
+            ExpressionDefect(
+                0,
+                f"cannot propose to {args.get('action')} {args.get('target')} with no grounds: "
+                "name the facts that justify it, or the person confirming has nothing to judge.",
+            ),
+        )
     missing = [g for g in grounds if g not in context.facts]
     if missing:
         return _defect(
