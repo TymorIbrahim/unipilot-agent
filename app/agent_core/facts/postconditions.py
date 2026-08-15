@@ -188,6 +188,45 @@ def check_alternatives_are_distinct(text: str, question: str = "") -> list[Viola
     return violations
 
 
+_FRACTIONAL_PERIOD = re.compile(
+    r"(\d+\.\d+)\s+(semesters?|terms?|years?)\b", re.IGNORECASE
+)
+
+
+def check_periods_are_whole(text: str) -> list[Violation]:
+    """You cannot take 0.42 of a semester.
+
+    Asked how many semesters remained, the agent answered "you have 1.42
+    semesters remaining at your current max load" -- 25.5 credits over an
+    18-credit cap, reported as the raw quotient. The arithmetic is right and the
+    sentence is not: a semester is indivisible, so the honest reading of 1.42 is
+    "at least 2".
+
+    Wrong in the optimistic direction, which is why it matters: a student reading
+    1.42 hears "nearly done in one more term" when they need two. Both runs of
+    that question answered this way, so it is the shape of the answer rather than
+    a slip.
+
+    Credits, grades and GPAs are untouched -- those are genuinely continuous.
+    Only a count of PERIODS is flagged, because only periods cannot be part-taken.
+    """
+    found = _FRACTIONAL_PERIOD.findall(text or "")
+    if not found:
+        return []
+    import math
+
+    value, unit = found[0]
+    whole = math.ceil(float(value))
+    return [
+        Violation(
+            "fractional_period",
+            f"the answer reports {value} {unit}, and a {unit.rstrip('s')} cannot be part-taken. "
+            f"Round UP -- {whole} -- and say 'at least {whole}': the remainder is a term the "
+            "student still has to attend, not a fraction they can skip.",
+        )
+    ]
+
+
 def check_gpa_in_range(gpa: float) -> list[Violation]:
     """A GPA is a ratio in (0, 100]. Above 100 is the classic slotting slip --
     total_points landed where the ratio belonged."""

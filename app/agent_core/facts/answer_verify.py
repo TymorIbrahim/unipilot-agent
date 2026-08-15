@@ -35,6 +35,7 @@ from app.agent_core.facts.postconditions import (
     Violation,
     check_alternatives_are_distinct,
     check_no_edge_identifiers,
+    check_periods_are_whole,
     check_no_group_identifiers,
     check_gpa_in_range,
     check_grades_in_range,
@@ -72,6 +73,7 @@ def verify_answer(
     violations = check_no_group_identifiers(answer.text)
     violations += check_no_edge_identifiers(answer.text)
     violations += check_alternatives_are_distinct(answer.text, question)
+    violations += check_periods_are_whole(answer.text)
 
     collections = list(_plan_collections(answer, facts))
     courses = [course for _, term_courses in collections for course in term_courses]
