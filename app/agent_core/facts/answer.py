@@ -123,7 +123,8 @@ def resolve_answer(
     """
     used: list[str] = []
     unknown: list[str] = []
-    detail_used: list[bool] = []
+    detail_renders: list[str] = []
+    detailed: list[tuple[str, Any]] = []
 
     def substitute(match: re.Match[str]) -> str:
         name, modifier = match.group(1), match.group(2)
@@ -132,9 +133,13 @@ def resolve_answer(
             unknown.append(name)
             return match.group(0)
         used.append(name)
+        rendered = _render(held.value, modifier)
         if modifier == "detail":
-            detail_used.append(True)
-        return _render(held.value, modifier)
+            # Kept per SLOT, not merged, so the duplicate rule can tell a course
+            # listed in two semesters from a course named twice inside one list.
+            detail_renders.append(rendered)
+            detailed.append((name, held.value))
+        return rendered
 
     filled = _SLOT.sub(substitute, template)
 
@@ -224,8 +229,49 @@ def resolve_answer(
     # semester credit totals balloon past any real load). A real placement
     # assigns each course to exactly one slot, so a repeat is proof `optimize`
     # was skipped. Refuse with the fix, so the loop pushes the model back to it.
-    if detail_used:
-        repeated = [code for code, n in Counter(_COURSE_CODE.findall(filled)).items() if n > 1]
+    # A source row slotted straight into prose. `:detail` renders EVERY field a
+    # record carries, which is right for a projected table and wrong for a row
+    # that came out of `find` untouched -- a live answer listed 16 remaining
+    # courses as `courseNumber … · title … · titleHebrew … · credits … ·
+    # faculty … · studyFramework … · catalogYear 2025 · status published`,
+    # showing a student the catalog's bookkeeping and the title twice.
+    #
+    # Checked on WIDTH rather than on field names, because this boundary stays
+    # domain-blind: it cannot know that `status` is uninteresting, but it can
+    # know that a table a person is meant to read has a handful of columns and
+    # that nine means nobody chose them. The fix is one `project` away, so the
+    # refusal names it.
+    for name, value in detailed:
+        widest = max((len(record.fields) for record in getattr(value, "records", ())), default=0)
+        if widest > _MAX_DETAIL_FIELDS:
+            fields = sorted({f for r in value.records for f in r.fields})
+            return Ungrounded(
+                f"'{name}' is rendered with :detail but its records carry {widest} fields "
+                f"({', '.join(fields)}) -- that is a source row, not an answer. `project` the "
+                "few a reader needs (a course number, a title, a credit count) and slot THAT. "
+                "Rendering every column shows internal bookkeeping and repeats itself."
+            )
+
+    # ACROSS detail slots, not within one. The signature this rule exists for is
+    # a course appearing in TWO SEMESTERS, and the semesters are two separately
+    # rendered collections -- that is what the faked split produces, because the
+    # model selected `course_offerings` twice by `semesterName`.
+    #
+    # Counting repeats in the merged text instead was a false positive with
+    # teeth: "am I eligible for 00960211" renders that course's prerequisite
+    # EDGES, and every edge spells the course code (`00960211->00940224`,
+    # `00960211->00940226`). A correct eligibility answer therefore looked
+    # exactly like a faked plan and was refused -- with advice to call `optimize`,
+    # on a question containing no plan at all. Gating on placement FIELDS would
+    # not do either: a faked plan has no `slot`, which is precisely what makes it
+    # fake, so that gate would switch the rule off exactly when it is needed.
+    if len(detail_renders) > 1:
+        appearances: Counter[str] = Counter()
+        for rendered in detail_renders:
+            # `set` per rendering: a course named twice inside ONE list is a list
+            # that mentions it twice, not a course placed twice.
+            appearances.update(set(_COURSE_CODE.findall(rendered)))
+        repeated = [code for code, n in appearances.items() if n > 1]
         if repeated:
             return Ungrounded(
                 f"the plan lists course {repeated[0]} in more than one semester. A real placement "
@@ -313,6 +359,16 @@ def _detail_line(record: Collection) -> str:
     return "- " + " · ".join(parts) if parts else ""
 
 
+_MAX_DETAIL_FIELDS = 5
+"""How many fields a `:detail` record may carry before it reads as a data dump.
+
+Calibrated against both ends: every legitimate rendering in the suite projects 1
+or 2 fields, and a realistic reader-facing row (number, title, credits, grade)
+is 4 -- while the narrowest source in the registry that caused trouble is 7 and
+`courses` is 9. Five leaves room for a genuinely wide answer table and still
+catches a row nobody narrowed.
+"""
+
 _DETAIL_CAP = 60
 """How many rows `:detail` prints before it summarises the rest. Generous: a
 full two-semester plan plus its unscheduled overflow is well under this, and a
@@ -342,12 +398,29 @@ def _readable_field(record: Collection) -> str:
     return _render_scalar(chosen) if chosen is not None else ""
 
 
+_DECIMALS = 2
+"""How many decimals a derived number shows a reader.
+
+Two, because every quantity in this domain is a grade, a GPA or a credit count,
+and none of them are meaningful past hundredths. The value is NOT rounded in the
+fact -- only in the rendering -- so arithmetic downstream still uses the full
+precision it was computed with.
+"""
+
+
 def _render_scalar(value: Scalar) -> str:
     if isinstance(value.value, bool):
         return "yes" if value.value else "no"
-    if isinstance(value.value, float) and value.value.is_integer():
-        # 16.0 credits reads as a rounding artefact; 16 reads as an answer.
-        return str(int(value.value))
+    if isinstance(value.value, float):
+        if value.value.is_integer():
+            # 16.0 credits reads as a rounding artefact; 16 reads as an answer.
+            return str(int(value.value))
+        # A live answer said "Your GPA is 72.64074074074074". Every digit of that
+        # is real -- it is a mean over 44 courses -- and printing all of them
+        # still makes a correct number look like a bug, and buries the two
+        # figures a student actually compares against a threshold.
+        trimmed = f"{value.value:.{_DECIMALS}f}".rstrip("0").rstrip(".")
+        return trimmed or "0"
     return str(value.value)
 
 

@@ -498,6 +498,52 @@ class TestDetailRender:
         )
         assert isinstance(result, Answer)
 
+    def test_one_list_naming_a_course_twice_is_not_a_double_placement(self) -> None:
+        """The false positive this rule had, found on a live eligibility run.
+
+        `prerequisite_edges` keys every edge by the course it belongs to, so
+        listing what 00960211 requires renders that code once per edge. Counting
+        repeats across the whole answer read this as a course placed in two
+        semesters and refused a correct answer -- telling the model to call
+        `optimize` on a question with no plan in it. A repeat INSIDE one list is
+        a list that mentions a course twice; only a repeat ACROSS two rendered
+        collections is a double placement.
+        """
+        edges = Collection(
+            records=(
+                Record(fields={"edge": Scalar(I, "00960211->00940224")}, basis=Basis.WIKI_DERIVED),
+                Record(fields={"edge": Scalar(I, "00960211->00940226")}, basis=Basis.WIKI_DERIVED),
+            ),
+            completeness=Completeness(complete=True, total=2),
+        )
+        result = resolve_answer(
+            "It requires one of:\n{edges:detail}",
+            {"edges": _held(edges, Basis.WIKI_DERIVED)},
+        )
+        assert isinstance(result, Answer), getattr(result, "reason", "")
+
+    def test_two_lists_sharing_a_course_is_still_refused(self) -> None:
+        """The rule must survive the narrowing -- a faked split has NO `slot`
+        field, so gating on placement fields would have switched it off exactly
+        where it earns its keep."""
+        winter = Collection(
+            records=(Record(fields={"number": Scalar(I, "00940219")}, basis=Basis.SIMULATED),),
+            completeness=Completeness(complete=True, total=1),
+        )
+        spring = Collection(
+            records=(
+                Record(fields={"number": Scalar(I, "00940219")}, basis=Basis.SIMULATED),
+                Record(fields={"number": Scalar(I, "00960327")}, basis=Basis.SIMULATED),
+            ),
+            completeness=Completeness(complete=True, total=2),
+        )
+        result = resolve_answer(
+            "Winter\n{winter:detail}\nSpring\n{spring:detail}",
+            {"winter": _held(winter, Basis.SIMULATED), "spring": _held(spring, Basis.SIMULATED)},
+        )
+        assert isinstance(result, Ungrounded)
+        assert "00940219" in result.reason and "optimize" in result.reason
+
     def test_an_empty_collection_renders_as_none(self) -> None:
         empty = Collection(records=(), completeness=Completeness(complete=True, total=0))
         # paired with a populated fact so the all-empty guard does not fire first
@@ -507,3 +553,58 @@ class TestDetailRender:
         )
         assert isinstance(result, Answer)
         assert "(none)" in result.text
+
+
+class TestDetailWidth:
+    """`:detail` over an unprojected source row is a data dump, not an answer."""
+
+    def _row(self, **fields) -> Collection:
+        return Collection(
+            records=(
+                Record(
+                    fields={k: Scalar(I, str(v)) for k, v in fields.items()},
+                    basis=Basis.OFFICIAL_RECORD,
+                ),
+            ),
+            completeness=Completeness(complete=True, total=1),
+        )
+
+    def test_a_raw_catalog_row_is_refused_with_the_fix_named(self) -> None:
+        """The live failure: 16 remaining courses rendered with every column the
+        catalog carries, including `status published` and the title twice."""
+        raw = self._row(
+            courseNumber="00940412", title="הסתברות מ", titleHebrew="הסתברות מ",
+            credits="4", faculty="מדעי הנתונים", studyFramework="לימודי הסמכה",
+            catalogYear="2025", status="published",
+        )
+        result = resolve_answer(
+            "Remaining:\n{remaining:detail}", {"remaining": _held(raw, Basis.OFFICIAL_RECORD)}
+        )
+        assert isinstance(result, Ungrounded)
+        assert "project" in result.reason
+        assert "status" in result.reason
+
+    def test_a_projected_table_is_accepted(self) -> None:
+        """The other side -- a reader-facing row a caller actually chose."""
+        projected = self._row(courseNumber="00940412", title="הסתברות מ", credits="4")
+        result = resolve_answer(
+            "Remaining:\n{remaining:detail}",
+            {"remaining": _held(projected, Basis.OFFICIAL_RECORD)},
+        )
+        assert isinstance(result, Answer), getattr(result, "reason", "")
+        assert "status" not in result.text
+
+
+class TestNumberRendering:
+    def test_a_long_mean_is_not_shown_to_fourteen_decimals(self) -> None:
+        """A live answer said "Your GPA is 72.64074074074074". Every digit is
+        real -- a mean over 44 courses -- but printing all of them makes a
+        correct number look like a bug."""
+        facts = {"gpa": _held(Scalar(Q, 72.64074074074074))}
+        assert resolve_answer("Your GPA is {gpa}.", facts).text == "Your GPA is 72.64."
+
+    def test_a_whole_number_still_renders_without_a_decimal_point(self) -> None:
+        assert resolve_answer("{n} credits", {"n": _held(Scalar(Q, 16.0))}).text == "16 credits"
+
+    def test_a_half_credit_keeps_its_meaningful_digit(self) -> None:
+        assert resolve_answer("{n} credits", {"n": _held(Scalar(Q, 3.5))}).text == "3.5 credits"
