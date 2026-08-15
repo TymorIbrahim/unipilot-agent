@@ -181,6 +181,24 @@ def resolve_answer(
             "is what was computed."
         )
 
+    # A held fact's NAME written as prose is a slot the model forgot to brace.
+    # Live: "I've prepared a request to register target_course_number." -- the
+    # student is shown a variable where a course code belongs, and every other
+    # check passes because the name is not a number and the real slots resolved.
+    # Only names carrying an underscore are considered: a fact called `credits`
+    # legitimately appears in "you have 129.5 credits", where `target_course_number`
+    # is not something anyone writes by accident.
+    leaked = sorted(
+        name for name in facts
+        if "_" in name and re.search(rf"(?<![{{\w]){re.escape(name)}(?!\w)", filled)
+    )
+    if leaked:
+        return Ungrounded(
+            f"the answer writes the fact NAME {', '.join(repr(n) for n in leaked)} as prose. "
+            "A reader sees the variable, not its value -- put it in braces to slot it, "
+            "or say the value in your own words."
+        )
+
     if not used:
         return Ungrounded(
             "the answer stands on no facts at all. Even a qualitative answer must cite what it "
