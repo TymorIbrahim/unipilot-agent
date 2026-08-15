@@ -398,6 +398,32 @@ class ChatModelAdapter:
         return extract_reply(getattr(reply, "content", reply))
 
 
+def build_system_prompt(context: Any) -> str:
+    """The static half of every turn: instructions, tools, and data sources.
+
+    All three are constant for a run, and two of them used to be rendered into
+    the TURN prompt instead -- 15,216 characters of a late turn's 18,411, sitting
+    AFTER the question. That placement is what made them expensive: a
+    prompt-prefix cache matches the longest identical head, and the head diverges
+    at the question, so every request re-read the catalog from scratch no matter
+    how many had read the same text before it.
+
+    Here, the static ~39k characters are one prefix shared by every request, and
+    the turn prompt carries only what actually changed. It also makes the spec's
+    `steps` describe what it says it does: `System_prompt` is the instruction set,
+    `User_prompt` is this turn.
+
+    Built per RUN rather than imported as a constant because the catalog is
+    context-dependent -- a tool whose dependency is unwired is not advertised --
+    and a system prompt promising a tool the dispatcher would refuse is the
+    catalog-honesty failure with a new hiding place.
+    """
+    from app.agent_core.facts.catalog import render_catalog
+    from app.agent_core.facts.loop import render_sources
+
+    return f"{SYSTEM_PROMPT}\n\n{render_catalog(context)}\n\n{render_sources(context)}"
+
+
 def build_adapter(**kwargs: Any) -> ChatModelAdapter | None:
     """An adapter, or None when no credentials are configured."""
     chat = build_chat_llm(**kwargs)

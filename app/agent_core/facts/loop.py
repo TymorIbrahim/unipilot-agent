@@ -363,7 +363,7 @@ def _brief(args: Any, limit: int = 180) -> str:
     return rendered if len(rendered) <= limit else rendered[: limit - 1] + "\u2026"
 
 
-def _render_sources(context: DispatchContext) -> str:
+def render_sources(context: DispatchContext) -> str:
     """What `find` can read, and the fields each source has.
 
     Measured on the first live run: the model spent three turns guessing source
@@ -454,11 +454,21 @@ def _prompt(
         if "me" in context.facts
         else ""
     )
+    # The tool catalog and the source list used to be rendered HERE, between the
+    # question and the facts. They are static -- 15,216 of the 18,411 characters
+    # of a late turn -- and putting them after the question meant a prompt-prefix
+    # cache could never span two different questions: the prefix diverges at the
+    # question and everything behind it is re-read every time. They now sit in
+    # the SYSTEM message (see `adapter.build_system_prompt`), which makes the
+    # static ~39k characters one prefix shared by every request, and leaves this
+    # prompt carrying only what actually changes.
+    #
+    # It also makes `steps` honest. The spec splits each call into
+    # `System_prompt` and `User_prompt`, and 15k characters of tool
+    # documentation filed under "User_prompt" described the wrong thing.
     return (
         f"{conversation_block}"
         f"QUESTION: {question}\n\n"
-        f"{render_catalog(context)}\n\n"
-        f"{_render_sources(context)}\n\n"
         f"FACTS YOU HOLD:\n{render_facts(values)}\n{whose}\n"
         f"NOTES FROM LAST TURN:\n{notes}{warning}\n\n"
         "Reply with either {\"calls\": [...]} or {\"answer\": \"...\"}. "
@@ -466,4 +476,4 @@ def _prompt(
     )
 
 
-__all__ = ["LoopResult", "MAX_TURNS", "Model", "Turn", "run_loop"]
+__all__ = ["LoopResult", "MAX_TURNS", "Model", "Turn", "render_sources", "run_loop"]

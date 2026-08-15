@@ -14,7 +14,7 @@ the trap is named where the model picks the column.
 from __future__ import annotations
 
 from app.agent_core.facts.dispatch import DispatchContext
-from app.agent_core.facts.loop import _render_sources
+from app.agent_core.facts.loop import render_sources
 from app.agent_core.facts.sources import COMPLETED_COURSES, REGISTRY
 
 
@@ -41,12 +41,12 @@ class TestTheTrapIsNamedWhereTheColumnIsChosen:
             assert not unknown, f"{name} notes undeclared fields: {sorted(unknown)}"
 
     def test_the_notes_reach_the_prompt(self) -> None:
-        rendered = _render_sources(DispatchContext(schemas=REGISTRY))
+        rendered = render_sources(DispatchContext(schemas=REGISTRY))
         assert "creditsCounted" in rendered
         assert "SUM THIS" in rendered, "the steer must survive into what the model reads"
 
     def test_the_prompt_warns_that_earned_includes_failures(self) -> None:
-        rendered = _render_sources(DispatchContext(schemas=REGISTRY))
+        rendered = render_sources(DispatchContext(schemas=REGISTRY))
         note = next(
             line for line in rendered.splitlines() if line.strip().startswith("! creditsEarned")
         )
@@ -54,5 +54,5 @@ class TestTheTrapIsNamedWhereTheColumnIsChosen:
 
     def test_a_source_without_notes_renders_unchanged(self) -> None:
         """The mechanism must cost nothing for the sources that do not use it."""
-        rendered = _render_sources(DispatchContext(schemas={"courses": REGISTRY["courses"]}))
+        rendered = render_sources(DispatchContext(schemas={"courses": REGISTRY["courses"]}))
         assert "!" not in rendered

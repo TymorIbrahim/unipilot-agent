@@ -249,13 +249,48 @@ class TestGovernors:
 
 
 class TestWhatTheModelSees:
-    async def test_the_prompt_carries_the_catalog_and_the_facts(self) -> None:
+    async def test_the_turn_prompt_carries_the_question_and_the_facts(self) -> None:
         model = _ScriptedModel({"answer": "{count}"})
         await run_loop("how many?", model, _context(count=Scalar(Q, 1.0)))
         prompt = model.prompts[0]
         assert "how many?" in prompt
-        assert "## compute" in prompt, "the tool catalog must be present"
         assert "count = 1" in prompt, "held facts must be visible"
+
+    async def test_the_turn_prompt_no_longer_repeats_the_static_catalog(self) -> None:
+        """The catalog and source list moved to the SYSTEM prompt. They are
+        constant for a run -- 15,216 characters of a late turn's 18,411 -- and
+        sitting after the question they broke every prompt-prefix cache, since
+        the prefix diverges at the question and everything behind it is re-read.
+        """
+        model = _ScriptedModel({"answer": "{count}"})
+        await run_loop("how many?", model, _context(count=Scalar(Q, 1.0)))
+        assert "## compute" not in model.prompts[0]
+        assert "data sources for `find`" not in model.prompts[0]
+
+    def test_the_system_prompt_carries_the_catalog_and_the_sources(self) -> None:
+        """Moved, not dropped -- the model still has to be told what it can call."""
+        from app.agent_core.facts.adapter import build_system_prompt
+        from app.agent_core.facts.sources import REGISTRY
+
+        system = build_system_prompt(DispatchContext(schemas=REGISTRY))
+        assert "## compute" in system, "the tool catalog must be present"
+        assert "data sources for `find`" in system
+        assert "academic advising agent" in system, "and the standing instructions"
+
+    def test_an_unwired_tool_stays_out_of_the_system_prompt(self) -> None:
+        """The catalog is context-dependent, which is why the system prompt is
+        built per run rather than imported as a constant. A system prompt
+        promising a tool the dispatcher would refuse is the catalog-honesty
+        failure with a new hiding place."""
+        from app.agent_core.facts.adapter import build_system_prompt
+        from app.agent_core.facts.sources import REGISTRY
+
+        bare = build_system_prompt(DispatchContext(schemas=REGISTRY))
+        wired = build_system_prompt(
+            DispatchContext(schemas=REGISTRY, retriever=object(), extractor=object())
+        )
+        assert "## search_corpus" not in bare
+        assert "## search_corpus" in wired
 
     async def test_the_prompt_shows_shapes_not_payloads(self) -> None:
         """The prompt must grow with the NUMBER of facts, not their size, or one

@@ -18,7 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.agent_core.facts.adapter import ChatModelAdapter, build_adapter
+from app.agent_core.facts.adapter import ChatModelAdapter, build_system_prompt
+from app.agent_core.reasoning.llm_client import build_chat_llm
 from app.agent_core.facts.answer import HeldFact
 from app.agent_core.facts.conversation import SupabaseConversations
 from app.agent_core.facts.loop import MAX_TURNS, LoopResult, run_loop
@@ -97,8 +98,7 @@ async def run_advice(
     """
     from app.db.postgres import get_database
 
-    adapter = build_adapter(settings=settings) if chat is None else ChatModelAdapter(chat)
-    if adapter is None:
+    if chat is None and build_chat_llm(settings=settings) is None:
         # No credentials. A loop with no model cannot run; surface it as an
         # honest non-answer rather than crashing the route.
         return LoopResult(outcome="exhausted", reason="no language model is configured")
@@ -124,6 +124,14 @@ async def run_advice(
 
     context = build_context(
         database, settings, _audience_of_profile(profile), **_extractor_override(chat)
+    )
+
+    # AFTER the context, because the system prompt now carries the tool catalog
+    # and the source list, and both are read off the context. Building the
+    # adapter first would have to guess at them.
+    adapter = ChatModelAdapter(
+        chat if chat is not None else build_chat_llm(settings=settings),
+        build_system_prompt(context),
     )
     context.facts["me"] = HeldFact(
         value=Scalar(ScalarKind.IDENTIFIER, user_id),
