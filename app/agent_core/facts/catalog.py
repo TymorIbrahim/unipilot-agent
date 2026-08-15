@@ -306,7 +306,12 @@ COMPOSITES: tuple[ToolSpec, ...] = (
             "or \"elective\". Each placed course comes back tagged with the `term` you asked for, so "
             "you split the plan on that same string. Read back the placed courses and their `credits` "
             "to derive anything per-course -- a minimum grade to hold a GPA, say -- with `compute`, "
-            "exactly as you would off any other collection."
+            "exactly as you would off any other collection.\n"
+            "     PROJECT IT BEFORE YOU RENDER IT. Each placed course carries six fields "
+            "(courseNumber, courseTitle, credits, category, prereqStatus, term), which is wider than "
+            "`:detail` accepts, so slotting the plan raw is ALWAYS refused and costs you two turns "
+            "finding that out. `compute` a `project` down to the few a reader needs -- the number, "
+            "the title, the credits -- and slot that instead."
         ),
         example={
             "tool": "plan_term",

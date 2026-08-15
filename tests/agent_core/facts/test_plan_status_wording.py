@@ -43,10 +43,19 @@ class TestTheWarningIsReadable:
     def test_a_met_prerequisite_is_plain(self) -> None:
         assert _status("prereqStatus", prereqStatus="satisfied") == "met"
 
-    def test_corequisites_get_the_same_treatment(self) -> None:
-        status = _status("coreqStatus", coreqStatus="check_corequisites")
-        assert "check_corequisites" not in status
-        assert "NOT met" in status
+    def test_corequisite_status_is_not_shown_at_all(self) -> None:
+        """It said "none" for every course in this deployment, because
+        `corequisitesText` is not a column, and "none" reads to a student as
+        "this one has no corequisites" rather than "never checked"."""
+        record = _placed_collection(_plan()).records[0]
+        assert "coreqStatus" not in record.fields
+
+    def test_its_wording_survives_for_when_the_field_is_seeded(self) -> None:
+        """Kept deliberately: the planner still computes the status, and the day
+        `corequisitesText` is seeded this is what it has to say."""
+        from app.agent_core.facts.dispatch import _READABLE_STATUS
+
+        assert "NOT met" in _READABLE_STATUS["check_corequisites"]
 
 
 class TestUnknownStatusesDegradeRatherThanVanish:
@@ -96,3 +105,30 @@ class TestThePlannerKeepsItsOwnVocabulary:
         assert _prereq_status(
             {"courseNumber": "X"}, set(), {}, {"X": [["A"]]}, set()
         ) == "check_prerequisites"
+
+
+class TestTheCatalogTellsTheTruthAboutTheShape:
+    """`plan_term`'s catalog entry names the fields and says the plan must be
+    projected before rendering, because a live run spent TWO of its eight turns
+    discovering that by being refused. Guidance that drifts from the record is
+    worse than none: it would send the model to project fields that are not
+    there."""
+
+    def test_the_advertised_fields_are_the_actual_fields(self) -> None:
+        from app.agent_core.facts.catalog import COMPOSITES
+
+        spec = next(s for s in COMPOSITES if s.name == "plan_term")
+        actual = set(_placed_collection(_plan()).records[0].fields)
+        for field in actual:
+            assert field in spec.when, f"{field} is returned but the catalog never names it"
+
+    def test_the_plan_is_still_too_wide_to_render_raw(self) -> None:
+        """The premise of the advice. If a record ever narrows to within the cap
+        the guidance becomes noise and should be deleted, not left to rot."""
+        from app.agent_core.facts.answer import _MAX_DETAIL_FIELDS
+
+        widest = len(_placed_collection(_plan()).records[0].fields)
+        assert widest > _MAX_DETAIL_FIELDS, (
+            f"a placed course now carries {widest} fields, within the {_MAX_DETAIL_FIELDS} "
+            "cap -- `plan_term`'s 'PROJECT IT BEFORE YOU RENDER IT' note is now false"
+        )

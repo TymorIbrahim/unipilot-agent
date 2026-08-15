@@ -835,11 +835,13 @@ def _placed_collection(result: Mapping[str, Any]) -> Collection:
                         str(placed.get("prereqStatus") or ""), str(placed.get("prereqStatus") or "")
                     )
                 ),
-                "coreqStatus": Scalar(
-                    ScalarKind.TEXT, _READABLE_STATUS.get(
-                        str(placed.get("coreqStatus") or ""), str(placed.get("coreqStatus") or "")
-                    )
-                ),
+                # NO coreqStatus. `_coreq_status` reads `corequisitesText`, which
+                # is not a column, so it returns "none" for every course always --
+                # and "none" reaching the model reads as "this course has no
+                # corequisites" rather than "never checked". It also cost width on
+                # a record that `:detail` already refuses for being too wide. Its
+                # wording stays in _READABLE_STATUS for the day the field is
+                # seeded; see `_coreq_status` in app/planning/term_plan.py.
                 # Always present -- a per-course answer PROJECTs it, and a project
                 # fails on any row that lacks the field -- so fall back to the
                 # number when the offering carried no title.
