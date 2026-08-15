@@ -830,8 +830,16 @@ def _placed_collection(result: Mapping[str, Any]) -> Collection:
                 "credits": Scalar(ScalarKind.QUANTITY, float(placed.get("credits") or 0)),
                 "term": Scalar(ScalarKind.IDENTIFIER, term_code),
                 "category": Scalar(ScalarKind.TEXT, str(placed.get("category") or "")),
-                "prereqStatus": Scalar(ScalarKind.TEXT, str(placed.get("prereqStatus") or "")),
-                "coreqStatus": Scalar(ScalarKind.TEXT, str(placed.get("coreqStatus") or "")),
+                "prereqStatus": Scalar(
+                    ScalarKind.TEXT, _READABLE_STATUS.get(
+                        str(placed.get("prereqStatus") or ""), str(placed.get("prereqStatus") or "")
+                    )
+                ),
+                "coreqStatus": Scalar(
+                    ScalarKind.TEXT, _READABLE_STATUS.get(
+                        str(placed.get("coreqStatus") or ""), str(placed.get("coreqStatus") or "")
+                    )
+                ),
                 # Always present -- a per-course answer PROJECTs it, and a project
                 # fails on any row that lacks the field -- so fall back to the
                 # number when the offering carried no title.
@@ -844,6 +852,28 @@ def _placed_collection(result: Mapping[str, Any]) -> Collection:
         records=tuple(records),
         completeness=Completeness(complete=True, total=len(records)),
     )
+
+
+_READABLE_STATUS = {
+    "satisfied": "met",
+    "check_prerequisites": "NOT met -- check before you register",
+    "check_corequisites": "co-requisite NOT met -- check before you register",
+    "none": "none",
+}
+"""The planner's status enum, in words a student can act on.
+
+These reach the reader. A `:detail` slot prints every field of a placed course,
+so a live plan showed "prereq check_prerequisites" beside a course the student
+is not eligible for -- which is the warning arriving in a vocabulary that only
+the planner speaks. The whole point of fixing that flag today was to tell
+somebody; an enum name tells them nothing.
+
+Mapped HERE, where the planner's result becomes a fact, rather than in the
+planner: `prereqStatus` is its internal vocabulary and the term-plan tests
+assert on it, while this is the presentation boundary. An unmapped value falls
+through unchanged rather than being blanked, so a status added later degrades to
+its raw name instead of disappearing.
+"""
 
 
 def _plan_summary(result: Mapping[str, Any]) -> str:
