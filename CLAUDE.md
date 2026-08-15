@@ -42,6 +42,19 @@ The course budget is **$13 total** on LLMod.ai.
 
 - Run the tests for whatever you touched before reporting a task done. Type checks are not
   tests.
+- `pytest` runs the fast unit suite in about a second. Two markers are deselected from it:
+  `-m live` makes paid LLM calls, and `-m supabase` queries the real database (~45s).
+  **Run `pytest -m supabase` before submitting** — it is the only check that every advertised
+  tool can actually be fed by a route the model can walk, and that failure mode is invisible
+  to unit tests by construction.
+- A passing unit suite is weak evidence here. Four of the five tools audited on 2026-08-15 —
+  `plan_term`, `forecast`, `interpret`/`extract_list`, `propose` — were wrong while fully
+  green, because the tests encoded the same wrong assumption as the code. Check a claim
+  against the DATA (SQL, the corpus) rather than against another part of this system.
+- `evaluation/ground_truth.json` holds the correct answer to each evaluation question, derived
+  from the data rather than from the agent. `python evaluation/run_eval.py` scores against it.
+  Comparing runs to each other only proves consistency — the agent answered "135 credits"
+  identically five times and was wrong every time.
 - Prefer porting from UniPilot's `services/ai` over writing from scratch — that code is
   live-validated and its failure modes were expensive to find. Port the design; only the
   I/O layer should change.

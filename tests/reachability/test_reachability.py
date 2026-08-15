@@ -11,10 +11,10 @@ something can supply its inputs, so that is what this asserts.
 
 Connects through the agent's own settings rather than a bespoke env var -- an
 earlier version read `MONGODB_URI`, which this project does not set, so it
-skipped everywhere while appearing to pass. It also imports
-`_fresh_mongo_client_per_test`, without which a memoized motor client from a
-previous test's closed event loop raises `RuntimeError` here and the whole file
-skips for a reason that has nothing to do with reachability.
+skipped everywhere while appearing to pass. `conftest.py` resets the connection
+pool per test for the same reason its Mongo ancestor reset the motor client:
+`get_pool` memoises process-wide, pytest-asyncio gives each test its own loop,
+and a pool bound to a closed loop raises here and reads as "no database".
 
 Both of those made this file report "not verified" while the database was
 sitting right there. A skip is not a neutral outcome -- it is a claim that
@@ -45,19 +45,19 @@ from app.agent_core.facts.wiring import (
     build_context,
     build_wiring,
     obtainable_from,
-    prerequisite_edges_source,
 )
-from app.db.mongo import get_database
-from tests.agent_core.ise_student_fixture import (  # noqa: F401 -- autouse fixture injection
-    _fresh_mongo_client_per_test,
-)
+from app.db.postgres import get_database
+
+# Every test here either queries Supabase or guards the catalog Supabase feeds,
+# so the whole module carries the marker rather than a dozen decorators.
+pytestmark = pytest.mark.supabase
 
 
 @pytest.fixture
 async def database():
     try:
         db = await get_database()
-        await db.command("ping")
+        await db.fetchval("select 1")
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"NOT VERIFIED: no database ({type(exc).__name__}). Tool reachability UNCHECKED.")
     return db
@@ -78,7 +78,7 @@ class TestCatalogHonesty:
     def test_no_tool_is_permanently_unadvertisable(self) -> None:
         """Every primitive must be reachable under SOME wiring, or it is dead
         code being carried in the prompt."""
-        schemas = {**REGISTRY, "prerequisite_edges": prerequisite_edges_source(_EmptyEngine())}
+        schemas = dict(REGISTRY)
         everything = DispatchContext(
             schemas=schemas,
             retriever=object(),
@@ -210,15 +210,6 @@ class TestOperatorUsesAreExhaustive:
             "an operator was added or removed without updating _MINIMAL_USE, so it would go "
             f"unchecked: {set(OPERATORS) ^ set(_MINIMAL_USE)}"
         )
-
-
-class _EmptyEngine:
-    """A built graph with no courses in it -- enough to construct the source."""
-
-    _built = True
-
-    class graph:  # noqa: N801 -- mimics the engine's attribute, not a real class
-        nodes: dict = {}
 
 
 class TestUnwiredToolsFailSoftly:
@@ -414,14 +405,22 @@ class TestEveryAdvertisedToolCanBeFed:
         `unnest` really is a route to them and not just a claim in `yields`.
         """
         context = build_context(database)
-        plan = await database["semester_plans"].find_one({"semesters.0.plannedCourses.0": {"$exists": True}})
-        if plan is None:
+        # `semesters` is jsonb here, not a Mongo subdocument, so the "has a
+        # semester holding courses" probe is a jsonpath rather than a dotted key.
+        plan_id = await database.fetchval(
+            """
+            select "_id" from semester_plans
+            where jsonb_path_exists("semesters", '$[*].plannedCourses[*]')
+            limit 1
+            """
+        )
+        if plan_id is None:
             pytest.skip("NOT VERIFIED: no stored plan has a semester holding courses")
 
         fetched = await dispatch(
             {"tool": "find", "as": "plan", "args": {
                 "source": "semester_plans",
-                "predicate": {"path": "_id", "op": "=", "value": str(plan["_id"])},
+                "predicate": {"path": "_id", "op": "=", "value": str(plan_id)},
                 "limit": 5,
             }},
             context,
