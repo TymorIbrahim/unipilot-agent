@@ -83,8 +83,16 @@ def plan_terms(
     courses_by_number: dict[str, dict[str, Any]],
     overlap_groups: list[set[str]],
     max_credits_limit: float,
+    prerequisite_groups: dict[str, list[list[str]]] | None = None,
 ) -> dict[str, Any]:
-    """Place candidates into the given terms, conflict-free, mandatory first."""
+    """Place candidates into the given terms, conflict-free, mandatory first.
+
+    `prerequisite_groups` maps a course number to ALTERNATIVE groups of course
+    numbers: any one member of a group satisfies it, and every group must be
+    satisfied. Optional so an existing caller keeps working, but without it
+    `prereqStatus` degrades to the catalog fields -- which this deployment does
+    not store, making every course vacuously satisfied.
+    """
     cap = round_credits(max_credits_limit)
     satisfied_ids = set(completed_course_ids)  # completed OR already placed -> prereq + dedup
     satisfied_numbers = {_number_key(number) for number in completed_course_numbers}
@@ -170,7 +178,13 @@ def plan_terms(
                     "credits": credits,
                     "category": candidate.category,
                     "selectedLessonEvents": selected_lessons,
-                    "prereqStatus": _prereq_status(course, satisfied_ids, courses_by_number),
+                    "prereqStatus": _prereq_status(
+                        course,
+                        satisfied_ids,
+                        courses_by_number,
+                        prerequisite_groups or {},
+                        satisfied_numbers,
+                    ),
                     "coreqStatus": _coreq_status(course, satisfied_numbers),
                 }
             )
@@ -304,10 +318,31 @@ def _prereq_status(
     course: dict[str, Any],
     satisfied_ids: set[str],
     courses_by_number: dict[str, dict[str, Any]],
+    prerequisite_groups: dict[str, list[list[str]]],
+    satisfied_numbers: set[str],
 ) -> str:
-    """Conservative prereq flag. Resolves both explicit `prerequisites` and any
-    parsed from `prerequisitesText` (via `courses_by_number`), then checks they
-    are satisfied -- but only ever FLAGS; placement is never blocked on it."""
+    """Conservative prereq flag. Only ever FLAGS; placement is never blocked.
+
+    The EDGES are authoritative where they exist, because they are the only
+    prerequisite data this deployment stores -- `courses` carries no
+    `prerequisites` or `prerequisitesText` column, so the catalog path below
+    resolves to an empty list and reports every course satisfied, which is how
+    this flag came to be stamped "satisfied" on a plan for a student who had
+    passed nothing.
+
+    Group semantics: a group is satisfied by ANY one of its members, and every
+    group must be satisfied. Reading the members as separate obligations would
+    flag students who are genuinely eligible.
+    """
+    groups = prerequisite_groups.get(str(course.get("courseNumber") or ""))
+    if groups:
+        met = all(
+            any(_number_key(number) in satisfied_numbers for number in group) for group in groups
+        )
+        return "satisfied" if met else "check_prerequisites"
+
+    # No edges for this course: fall back to the catalog fields. Retained for
+    # any deployment that does store them; here it means "nothing known".
     resolved = resolve_prerequisite_ids(course, courses_by_number=courses_by_number)
     probe = {**course, "prerequisites": resolved}
     return "satisfied" if prerequisites_met(probe, satisfied_ids) else "check_prerequisites"

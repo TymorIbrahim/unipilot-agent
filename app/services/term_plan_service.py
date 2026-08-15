@@ -95,7 +95,9 @@ async def build_term_plan(
 
     max_credits_limit = _resolve_cap(profile, max_credits)
     completed_course_ids = set(_effective_completions(completed_records))
-    completed_course_numbers = _completed_numbers(completed_records, courses_by_id)
+    completed_course_numbers = _completed_numbers(
+        completed_records, courses_by_id, passed_ids=completed_course_ids
+    )
     overlap_groups = build_catalog_overlap_groups(catalog_courses)
 
     resolved_candidates, unknown = _resolve_candidates(candidates, courses_by_number)
@@ -127,6 +129,7 @@ async def build_term_plan(
         courses_by_number=courses_by_number,
         overlap_groups=overlap_groups,
         max_credits_limit=max_credits_limit,
+        prerequisite_groups=await _load_prerequisite_groups(database, candidate_numbers),
     )
 
     result["unscheduled"] = [
@@ -191,6 +194,44 @@ async def _load_catalog(
         completed_ids,
     )
     return [dict(row) for row in rows]
+
+
+async def _load_prerequisite_groups(
+    database: Any, candidate_numbers: list[str]
+) -> dict[str, list[list[str]]]:
+    """Each candidate's prerequisites, as ALTERNATIVE GROUPS of course numbers.
+
+    The planner had no prerequisite data at all. `_prereq_status` resolved a
+    course's `prerequisites` / `prerequisitesText` fields, and neither survived
+    the move to Postgres -- `courses` has nine columns and none of them is a
+    prerequisite. So the list came back empty, an empty list is vacuously
+    satisfied, and EVERY placed course was stamped `prereqStatus: "satisfied"`,
+    including for a student who had passed nothing at all. The catalog tells the
+    model this tool "FLAGS an unmet prerequisite rather than guessing"; the flag
+    could not fire.
+
+    The data was there the whole time: 4,766 rows in `prerequisite_edges`,
+    materialised at seed time, which nothing in the planner read.
+
+    Returned grouped, because the grouping IS the semantics: edges sharing a
+    `group` are alternatives (any one satisfies it), and separate groups are each
+    required. Flattening them into one list would turn a choice into a pile of
+    obligations and flag eligible students -- the same mistake the reasoning
+    prompt had to be taught not to make.
+    """
+    if not candidate_numbers:
+        return {}
+    rows = await database.fetch(
+        'select "course", "requires", "group" from prerequisite_edges '
+        'where "course" = any($1::text[])',
+        candidate_numbers,
+    )
+    by_course: dict[str, dict[str, list[str]]] = {}
+    for row in rows:
+        course = str(row["course"])
+        group = str(row["group"])
+        by_course.setdefault(course, {}).setdefault(group, []).append(str(row["requires"]))
+    return {course: list(groups.values()) for course, groups in by_course.items()}
 
 
 async def _load_term_offerings(
@@ -328,16 +369,26 @@ def _effective_completions(completed_records: list[dict[str, Any]]) -> dict[str,
 
 
 def _completed_numbers(
-    completed_records: list[dict[str, Any]], courses_by_id: dict[str, dict[str, Any]]
+    completed_records: list[dict[str, Any]],
+    courses_by_id: dict[str, dict[str, Any]],
+    passed_ids: set[str] | None = None,
 ) -> set[str]:
-    """Course NUMBERS of completed courses, for the overlap and coreq rules.
+    """Course NUMBERS of PASSED courses, for the prereq, overlap and coreq rules.
 
     Best effort by design: the transcript keys on `courseId`, and an id that
     resolves to no catalog row yields no number. That weakens overlap detection
     for that one course; it never weakens dedup, which is id-based.
+
+    `passed_ids` filters to courses actually passed, and its absence was a bug:
+    `_effective_completions` has always excluded failed attempts from the ID set,
+    while this built its number set from EVERY row. So a course graded 30 could
+    satisfy a prerequisite or a corequisite by number while correctly failing to
+    count as completed by id -- the two sets disagreeing about the same course.
     """
     numbers: set[str] = set()
     for record in completed_records:
+        if passed_ids is not None and str(record.get("courseId") or "") not in passed_ids:
+            continue
         number = record.get("courseNumber")
         if number:
             numbers.add(str(number))
