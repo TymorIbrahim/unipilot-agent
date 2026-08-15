@@ -89,6 +89,7 @@ class TestNoDrift:
             # wire keys and argument names, not tools
             "search_corpus", "completed_courses", "track_requirements", "remaining_required",
             "prerequisite_edges", "past_offerings", "upcoming_semesters", "period_path",
+            "cycle_path", "academic_year",
             "minimize_slots", "eligibility_check", "courseNumber", "creditsEarned",
             "balance_load", "slot_index", "item_id", "slot_id",
             # Illustrative FACT names in the examples -- a model invents these,

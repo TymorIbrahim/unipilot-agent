@@ -42,9 +42,29 @@ def forecast(
     *,
     period_path: Path,
     target: str,
+    cycle_path: Union[Path, None] = None,
     min_observations: int = MIN_OBSERVATIONS,
 ) -> Union[Forecast, DataDefect]:
-    """Predict whether `target` recurs, from the periods actually observed."""
+    """Predict whether `target` recurs, from the periods actually observed.
+
+    `cycle_path` names the repeating unit the period sits inside -- the academic
+    YEAR for a semester. Give it whenever the observations span more than one
+    cycle, because without it the denominator is the wrong one and the answer
+    inverts.
+
+    Measured: course 00140709 ran in spring in 3 of the 3 years on record --
+    every spring it could have -- and was forecast as NOT running next spring.
+    Counting `spring offerings / all offerings` asks "what fraction of this
+    course's offerings were spring", which is not the question. A course offered
+    in all three terms of every year scores ~0.33 for each of them, so the most
+    reliably offered courses got the most pessimistic forecast, and the error
+    ran in the direction that tells a student a course is unavailable when it
+    always runs.
+
+    With `cycle_path` the denominator is the number of distinct CYCLES observed
+    and the numerator is the cycles in which `target` occurred, which is the
+    recurrence the question is actually about.
+    """
     if not observations.completeness.complete:
         # The completeness bug wearing a different hat: a rate computed over
         # whatever happened to be fetched, reported as though it were the whole
@@ -60,6 +80,34 @@ def forecast(
 
     periods = [_period(period_path, record) for record in observations.records]
     present = [p for p in periods if p is not None]
+
+    if cycle_path is not None:
+        # One vote per cycle, not per record: a year in which the course ran
+        # twice is still one year, and a year in which it ran in another term is
+        # still a year that could have had this one.
+        cycles: set[str] = set()
+        hit_cycles: set[str] = set()
+        for record in observations.records:
+            cycle = _period(cycle_path, record)
+            if cycle is None:
+                continue
+            cycles.add(cycle)
+            if _period(period_path, record) == target:
+                hit_cycles.add(cycle)
+
+        if len(cycles) < min_observations:
+            return DataDefect(
+                0,
+                f"only {len(cycles)} usable cycle(s); at least {min_observations} are needed "
+                "before a rate means anything. A pattern from fewer is noise with a number "
+                "attached.",
+            )
+        return Forecast(
+            value=Scalar(ScalarKind.BOOL, len(hit_cycles) / len(cycles) >= 0.5),
+            confidence=_confidence(len(hit_cycles) / len(cycles), len(cycles)),
+            observations=len(cycles),
+            rate=len(hit_cycles) / len(cycles),
+        )
 
     if len(present) < min_observations:
         return DataDefect(

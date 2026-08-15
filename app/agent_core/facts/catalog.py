@@ -197,12 +197,23 @@ PRIMITIVES: tuple[ToolSpec, ...] = (
             "For questions about a period that has not happened -- will this run next spring. "
             "`observations` names a collection you have already fetched, one record per past "
             "occurrence, with a field naming the period. Needs the WHOLE history: a projection "
-            "from a partial one gets reported as though it were the whole record."
+            "from a partial one gets reported as though it were the whole record.\n"
+            "     ALWAYS give `cycle_path` -- the field naming the repeating unit the period sits "
+            "inside, `academicYear` for a semester. Without it the rate is the share of all "
+            "offerings that fell in the target period, which is a different question and inverts "
+            "the answer for any course offered in more than one term: a course that ran EVERY "
+            "spring for three years, but also in winter and summer, scores 0.43 and comes back "
+            "'will not run'."
         ),
         example={
             "tool": "forecast",
             "as": "spring_forecast",
-            "args": {"observations": "past_offerings", "period_path": "semesterName", "target": "spring"},
+            "args": {
+                "observations": "past_offerings",
+                "period_path": "semesterName",
+                "cycle_path": "academicYear",
+                "target": "spring",
+            },
         },
     ),
     ToolSpec(

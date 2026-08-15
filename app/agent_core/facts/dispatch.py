@@ -544,10 +544,12 @@ async def _forecast(name: str, args: Mapping[str, Any], context: DispatchContext
     target = _literal(args, "target", context)
     if isinstance(target, ExpressionDefect):
         return _defect(name, target)
+    cycle = args.get("cycle_path")
     result = forecast(
         observations,
         period_path=Path.parse(args.get("period_path", "period")),
         target=target,
+        cycle_path=Path.parse(cycle) if cycle else None,
     )
     if isinstance(result, DataDefect):
         return _defect(name, result)
