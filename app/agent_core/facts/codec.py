@@ -57,6 +57,13 @@ _ARITH = {
     "subtract": ArithOp.SUBTRACT, "sub": ArithOp.SUBTRACT, "minus": ArithOp.SUBTRACT, "-": ArithOp.SUBTRACT,
     "multiply": ArithOp.MULTIPLY, "mul": ArithOp.MULTIPLY, "times": ArithOp.MULTIPLY, "*": ArithOp.MULTIPLY, "×": ArithOp.MULTIPLY,
     "divide": ArithOp.DIVIDE, "div": ArithOp.DIVIDE, "/": ArithOp.DIVIDE, "÷": ArithOp.DIVIDE,
+    # Comparisons. Spelled out as well as symbolic, because a model writing JSON
+    # reaches for "gte" as readily as ">=".
+    "gte": ArithOp.GTE, "ge": ArithOp.GTE, ">=": ArithOp.GTE, "at_least": ArithOp.GTE,
+    "gt": ArithOp.GT, ">": ArithOp.GT, "greater_than": ArithOp.GT,
+    "lte": ArithOp.LTE, "le": ArithOp.LTE, "<=": ArithOp.LTE, "at_most": ArithOp.LTE,
+    "lt": ArithOp.LT, "<": ArithOp.LT, "less_than": ArithOp.LT,
+    "eq": ArithOp.EQ, "==": ArithOp.EQ, "equals": ArithOp.EQ,
     "max": ArithOp.MAX, "maximum": ArithOp.MAX,
     "min": ArithOp.MIN, "minimum": ArithOp.MIN,
 }

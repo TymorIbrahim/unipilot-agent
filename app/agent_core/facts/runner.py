@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Union
 
 from app.agent_core.facts.operators import (
+    COMPARISONS,
     OPERATORS,
     Arith,
     ArithOp,
@@ -547,8 +548,17 @@ def _apply_scalar(
         ArithOp.DIVIDE: current.value / right.value if right.value else 0,
         ArithOp.MAX: max(current.value, right.value),
         ArithOp.MIN: min(current.value, right.value),
+        ArithOp.GTE: current.value >= right.value,
+        ArithOp.GT: current.value > right.value,
+        ArithOp.LTE: current.value <= right.value,
+        ArithOp.LT: current.value < right.value,
+        ArithOp.EQ: current.value == right.value,
     }[arith_op]
-    return Scalar(ScalarKind.QUANTITY, value), combined
+    # Same rule as the expression path: a comparison yields a truth value, and
+    # calling it a quantity would let it be summed and would show the answer
+    # boundary a "number" that is really a yes.
+    kind = ScalarKind.BOOL if arith_op in COMPARISONS else ScalarKind.QUANTITY
+    return Scalar(kind, value), combined
 
 
 def _compare_scalars(left: Scalar, comparator: Any, right: Scalar) -> Union[bool, ExpressionDefect]:
@@ -728,8 +738,14 @@ def _eval_scalar(
         ArithOp.DIVIDE: left_value.value / right_value.value if right_value.value else 0,
         ArithOp.MAX: max(left_value.value, right_value.value),
         ArithOp.MIN: min(left_value.value, right_value.value),
+        ArithOp.GTE: left_value.value >= right_value.value,
+        ArithOp.GT: left_value.value > right_value.value,
+        ArithOp.LTE: left_value.value <= right_value.value,
+        ArithOp.LT: left_value.value < right_value.value,
+        ArithOp.EQ: left_value.value == right_value.value,
     }[expression.op]
-    return Scalar(ScalarKind.QUANTITY, result), weakest([left_basis, right_basis])
+    kind = ScalarKind.BOOL if expression.op in COMPARISONS else ScalarKind.QUANTITY
+    return Scalar(kind, result), weakest([left_basis, right_basis])
 
 
 def _unnest(

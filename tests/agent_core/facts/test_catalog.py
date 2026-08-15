@@ -95,7 +95,7 @@ class TestNoDrift:
             # Illustrative FACT names in the examples -- a model invents these,
             # they are not part of the system's vocabulary.
             "still_needed", "prereq_edges", "prereqs_met", "courses_to_place", "my_semesters",
-            "next_course",
+            "next_course", "met_groups", "all_groups",
             # The `as` result-names shown in the tool examples (also invented).
             "my_courses", "policy_hits", "prereq_chain", "required_credits", "spring_forecast",
             "elective_codes", "winter_plan",

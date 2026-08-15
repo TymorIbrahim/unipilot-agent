@@ -119,6 +119,23 @@ class ArithOp(Enum):
     # absence is why the negative-min-grade answers had no arithmetic way out.
     MAX = "max"
     MIN = "min"
+    # Comparisons, which produce a BOOL rather than a quantity. Their absence
+    # was a hole the eligibility question fell into every time: "am I eligible"
+    # is `met_groups >= required_groups`, the grammar could add and subtract the
+    # two counts but never compare them, and the model spent three turns
+    # rediscovering that before answering with slots for facts it never managed
+    # to derive. "Do I meet the minimum", "is my GPA above 65" and "have I
+    # earned enough credits" are the same shape.
+    GTE = ">="
+    GT = ">"
+    LTE = "<="
+    LT = "<"
+    EQ = "=="
+
+
+COMPARISONS = frozenset({ArithOp.GTE, ArithOp.GT, ArithOp.LTE, ArithOp.LT, ArithOp.EQ})
+"""The ops above that yield a truth value. Named once so the evaluator, the type
+checker and the codec cannot disagree about which ones those are."""
 
 
 @dataclass(frozen=True)
@@ -474,7 +491,10 @@ def _infer_scalar(index: int, expression: ScalarExpr, shape: CollectionShape) ->
         if kind is not ScalarKind.QUANTITY:
             name = operand.path.dotted if isinstance(operand, PathRef) else "a literal"
             return _not_a_quantity(index, name, shape)
-    return ScalarKind.QUANTITY
+    # A comparison of two quantities is a truth value, not a quantity. Declaring
+    # it QUANTITY would let it be summed, and would let the answer boundary see
+    # a "number" that is really a yes.
+    return ScalarKind.BOOL if expression.op in COMPARISONS else ScalarKind.QUANTITY
 
 
 __all__ = [

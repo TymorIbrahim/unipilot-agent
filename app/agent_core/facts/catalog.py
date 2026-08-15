@@ -151,6 +151,12 @@ PRIMITIVES: tuple[ToolSpec, ...] = (
             "     To compute ONE value straight FROM held scalars -- a GPA from points and credits, "
             "an average, a threshold -- a pipeline drops `source`/`stages` and gives a `value` "
             'expression: {"name": "gpa", "value": {"div": [{"fact": "points"}, {"fact": "credits"}]}}. '
+            "     A COMPARISON is a value expression too, and yields true/false rather than a "
+            'number: {"name": "eligible", "value": {"gte": [{"fact": "met_groups"}, '
+            '{"fact": "all_groups"}]}}. `gte`/`gt`/`lte`/`lt`/`eq`. Reach for it whenever the '
+            "question is a yes/no about two quantities -- am I eligible, do I meet the minimum, "
+            "is my average above the threshold -- instead of subtracting them and describing the "
+            "sign of the result. "
             "The expression is the same one an `extend` field takes (`{\"fact\":..}` for a held "
             "scalar, `{\"value\":..}` for a literal, and `add`/`sub`/`mul`/`div`), only without "
             "`{\"path\":..}` -- there are no rows to read. No carrier collection, no `aggregate only`."
