@@ -1,0 +1,44 @@
+# What must NOT reach the serverless bundle.
+#
+# Bundle size is cold-start latency on a service already fighting a 300s ceiling,
+# and the two biggest things in this directory are things the deployment has no
+# use for: a 113MB virtualenv (Vercel installs from requirements.txt itself) and
+# the seed tooling, which runs on a developer machine against UniPilot's Mongo
+# and must never be part of the deployed system.
+#
+# `data/` is deliberately NOT excluded. `wiki_corpus.json.gz` IS the corpus at
+# runtime and `prompt_examples.json` IS what /api/agent_info serves; without them
+# three tools go unadvertised and a graded endpoint returns an empty set.
+
+.venv/
+__pycache__/
+*.py[cod]
+
+# Seed and recording tooling -- dev-machine only. `scripts/seed.py` imports
+# pymongo, which is not in requirements.txt on purpose: the deployed agent has
+# no Mongo and must not be able to reach one.
+#
+# LEADING SLASH IS LOAD-BEARING. These are gitignore-style patterns, so a bare
+# `db/` matches a directory of that name at ANY depth -- it silently excluded
+# `app/db/` too, and the deployed function died with
+# `ModuleNotFoundError: No module named 'app.db'` on the first request that
+# touched the database. Anchored to the repo root, they mean what they look like.
+/scripts/
+/db/
+
+# Tests and their fixtures.
+/tests/
+/pytest.ini
+/requirements-dev.txt
+.pytest_cache/
+
+# Local tooling and secrets. `.env` is listed for defence in depth -- Vercel
+# takes configuration from project environment variables, and a committed or
+# uploaded .env would silently outrank them.
+.env
+.env.local
+.git/
+.gitignore
+*.code-workspace
+.DS_Store
+CLAUDE.md
