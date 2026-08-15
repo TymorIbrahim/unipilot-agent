@@ -146,7 +146,8 @@ def resolve_answer(
     if unknown:
         return Ungrounded(
             f"the answer refers to {', '.join(repr(u) for u in unknown)}, which "
-            f"{'is' if len(unknown) == 1 else 'are'} not a held fact. "
+            f"{'is' if len(unknown) == 1 else 'are'} not a held fact."
+            f"{_did_you_mean(unknown, facts)} "
             f"Available: {sorted(facts)}."
         )
 
@@ -294,6 +295,35 @@ def resolve_answer(
             if facts[name].derivation
         ),
     )
+
+
+def _did_you_mean(unknown: tuple, facts: Mapping[str, object]) -> str:
+    """Name the held fact an unknown slot was probably reaching for.
+
+    A live run derived `english_requirement`, then wrote
+    `{english_requirement_phrase}` in the answer and was refused. The refusal
+    already listed every held fact, and the model still did not recover -- a
+    list of twelve names does not point at the one that is a character-swap
+    away, and the run ended with no answer for what was a typo.
+
+    The cutoff is deliberately high. This only ever SUGGESTS -- nothing is
+    renamed or auto-corrected, because a slot quietly resolved to a fact the
+    model did not mean is the grounding failure this whole layer exists to
+    prevent. A near-miss below the cutoff simply gets the list, as before.
+    """
+    from difflib import get_close_matches
+
+    pairs = [
+        (name, close[0])
+        for name in unknown
+        for close in [get_close_matches(name, list(facts), n=1, cutoff=0.75)]
+        if close
+    ]
+    if not pairs:
+        return ""
+    if len(pairs) == 1:
+        return f" Did you mean {pairs[0][1]!r}?"
+    return " Did you mean " + ", ".join(f"{bad!r} -> {good!r}" for bad, good in pairs) + "?"
 
 
 _DOUBLED_YES = re.compile(r"\b(yes|no)\b([\s,;:.—–-]+)\b\1\b", re.IGNORECASE)
