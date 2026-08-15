@@ -20,6 +20,24 @@ ids as text, so the pass was deleted rather than translated. One check is new
 and could not exist against Mongo -- every declared field must be a real COLUMN,
 which is knowable up front in a database that has a schema.
 
+`test_ledger.py` is `tests/reachability/test_ledger_against_data.py`, marked
+`supabase` and green. `MongoLedger` -> `SupabaseLedger` and `MongoConversations`
+-> `SupabaseConversations`; the guarantee is unchanged because it was never
+Mongo's -- the token is the PRIMARY KEY, so the database arbitrates a
+double-submit and `insert ... on conflict do nothing` reports who won. Before
+this ran, `spent_confirmations` held 0 rows: the one-write guarantee behind
+`propose`, the only tool that can change anything, had never been exercised
+against Postgres at all.
+
+What the port needed beyond the mechanical rename: there is no throwaway
+database. `spent_confirmations` and `agent_conversations` are LIVE runtime state
+that `scripts/seed.py` deliberately never touches, and the latter holds real
+exchanges from the deployed GUI, so `delete_many({})` has no equivalent here.
+Rows are namespaced and diffed out instead -- and a prefix alone was not enough:
+the end-to-end `propose` tests spend tokens minted by `confirm()`, which knows
+nothing about the fixture, and the first run left two of them behind in a live
+table.
+
 `test_reachability.py` now lives at `tests/reachability/`, marked `supabase`
 and running green against the real database. **Run it before submitting**
 (`pytest -m supabase`): it is the only check that every advertised tool can
