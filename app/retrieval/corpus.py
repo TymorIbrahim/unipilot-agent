@@ -177,9 +177,12 @@ def get_corpus(path: str | None = None) -> WikiCorpus | None:
 class CorpusRetriever:
     """The `Retriever` the fact layer expects: `search` and `page`."""
 
-    def __init__(self, corpus: WikiCorpus, settings: Any | None = None) -> None:
+    def __init__(
+        self, corpus: WikiCorpus, settings: Any | None = None, audience: str | None = None
+    ) -> None:
         self._corpus = corpus
         self._settings = settings
+        self._audience = audience
 
     def _resolved_settings(self) -> Any:
         if self._settings is None:
@@ -235,6 +238,11 @@ class CorpusRetriever:
             candidates.setdefault(vector_id, chunk)
             semantic_scores[vector_id] = score
 
+        candidates = {
+            vector_id: chunk
+            for vector_id, chunk in candidates.items()
+            if _addresses(chunk, self._audience)
+        }
         if not candidates:
             return []
 
@@ -263,9 +271,42 @@ class CorpusRetriever:
         return self._corpus.page(slug)
 
 
-def build_retriever(path: str | None = None, settings: Any | None = None) -> CorpusRetriever | None:
+UNDERGRADUATE_TAGS = frozenset({"undergraduate", "bsc"})
+GRADUATE_TAGS = frozenset({"graduate", "msc", "phd", "meng"})
+
+_AUDIENCE_TAGS = {
+    "undergraduate": (UNDERGRADUATE_TAGS, GRADUATE_TAGS),
+    "graduate": (GRADUATE_TAGS, UNDERGRADUATE_TAGS),
+}
+
+
+def _addresses(chunk: Any, audience: str | None) -> bool:
+    """Whether a chunk is written for this student's degree level.
+
+    The Technion publishes two regulation sets, and both answer "what is the
+    English requirement" confidently and differently. A BSc student was told
+    "All graduate students must demonstrate English proficiency" because
+    `concepts/regulations-graduate.md` simply out-ranked the undergraduate page
+    for that query -- and nothing downstream could catch it, since the passage
+    was quoted faithfully and the citation was real.
+
+    So the wrong document is removed before ranking rather than argued with
+    afterwards. Only chunks that declare the OPPOSING level and not this one are
+    dropped: the 1,988 chunks that declare no level at all (course pages, most
+    faculty pages) address everyone and must survive.
+    """
+    if audience is None:
+        return True
+    mine, theirs = _AUDIENCE_TAGS.get(audience, (frozenset(), frozenset()))
+    tags = {str(tag).lower() for tag in (getattr(chunk, "tags", None) or ())}
+    return not (tags & theirs) or bool(tags & mine)
+
+
+def build_retriever(
+    path: str | None = None, settings: Any | None = None, audience: str | None = None
+) -> CorpusRetriever | None:
     corpus = get_corpus(path)
-    return CorpusRetriever(corpus, settings) if corpus is not None else None
+    return CorpusRetriever(corpus, settings, audience) if corpus is not None else None
 
 
 __all__ = [

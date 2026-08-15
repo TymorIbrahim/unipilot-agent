@@ -13,6 +13,7 @@ into the working set itself.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +25,8 @@ from app.agent_core.facts.loop import MAX_TURNS, LoopResult, run_loop
 from app.agent_core.facts.types import Basis, Scalar, ScalarKind
 from app.agent_core.facts.wiring import ModelExtractor, build_context
 from app.agent_core.loop.course_names import course_codes_in, course_display_name
+
+logger = logging.getLogger(__name__)
 
 # Outcome (facts loop) -> the frontend's retrieval_agent.status vocabulary.
 # A declined or proposed question IS a completed, valid response: the system
@@ -101,7 +104,9 @@ async def run_advice(
         return LoopResult(outcome="exhausted", reason="no language model is configured")
 
     database = await get_database()
-    context = build_context(database, settings, **_extractor_override(chat))
+    context = build_context(
+        database, settings, await _audience_of(database, user_id), **_extractor_override(chat)
+    )
     context.facts["me"] = HeldFact(
         value=Scalar(ScalarKind.IDENTIFIER, user_id),
         basis=Basis.OFFICIAL_RECORD,
@@ -133,6 +138,35 @@ async def run_advice(
         await store.append(thread_key, question, result.answer.text)
 
     return result
+
+
+_GRADUATE_PROGRAM_TYPES = frozenset({"msc", "ma", "phd", "me", "meng", "mba"})
+
+
+async def _audience_of(database: Any, user_id: str) -> str | None:
+    """The student's degree level, so retrieval never quotes the wrong rulebook.
+
+    One extra query per request, deliberately: the Technion's undergraduate and
+    graduate regulations both answer "what is the English requirement", and a
+    live BSc student was told "All graduate students must demonstrate English
+    proficiency" because the graduate page out-ranked the undergraduate one.
+    Nothing downstream could catch that -- the quote was faithful and the
+    citation real -- so the level has to be known BEFORE the corpus is searched.
+
+    Returns None when the profile is missing or the type is unrecognised, which
+    leaves retrieval unfiltered. An unknown level must not silently narrow the
+    corpus to nothing.
+    """
+    try:
+        program_type = await database.fetchval(
+            'select "programType" from student_profiles where "userId" = $1', user_id
+        )
+    except Exception:  # noqa: BLE001 -- an unreadable profile is an unknown level
+        logger.warning("could not read programType for %s; corpus stays unfiltered", user_id)
+        return None
+    if not program_type:
+        return None
+    return "graduate" if str(program_type).strip().lower() in _GRADUATE_PROGRAM_TYPES else "undergraduate"
 
 
 def _extractor_override(chat: Any | None) -> dict[str, Any]:

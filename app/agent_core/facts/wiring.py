@@ -330,7 +330,7 @@ def curriculum_source(engine: Any) -> DerivedSchema:
     )
 
 
-def build_wiring(settings: Any | None = None) -> dict[str, Any]:
+def build_wiring(settings: Any | None = None, audience: str | None = None) -> dict[str, Any]:
     """Retriever, extractor and derived sources for a `DispatchContext`.
 
     Returns only what could actually be built. A missing key means the catalog
@@ -353,7 +353,7 @@ def build_wiring(settings: Any | None = None) -> dict[str, Any]:
     try:
         from app.retrieval.corpus import build_retriever
 
-        retriever = build_retriever(settings=settings)
+        retriever = build_retriever(settings=settings, audience=audience)
         if retriever is not None:
             wiring["retriever"] = retriever
     except Exception:  # noqa: BLE001 -- an unavailable corpus is a missing capability
@@ -371,7 +371,9 @@ def build_wiring(settings: Any | None = None) -> dict[str, Any]:
     return wiring
 
 
-def build_context(database: Any, settings: Any | None = None, **overrides: Any) -> Any:
+def build_context(
+    database: Any, settings: Any | None = None, audience: str | None = None, **overrides: Any
+) -> Any:
     """The one place a fully wired `DispatchContext` is assembled.
 
     It did not exist before, and its absence was the actual defect behind two
@@ -387,7 +389,7 @@ def build_context(database: Any, settings: Any | None = None, **overrides: Any) 
     from app.agent_core.facts.dispatch import DispatchContext
     from app.agent_core.facts.sources import REGISTRY
 
-    wiring = build_wiring(settings)
+    wiring = build_wiring(settings, audience)
     schemas = {**REGISTRY, **wiring.get("sources", {})}
 
     return DispatchContext(
