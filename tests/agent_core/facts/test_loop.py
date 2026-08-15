@@ -174,17 +174,78 @@ class TestGovernors:
         assert result.turns <= NO_PROGRESS_LIMIT + 1
 
     async def test_the_turn_budget_is_honoured(self) -> None:
+        # Each turn derives something GENUINELY new (a different aggregate), so
+        # the budget is what stops this run and not the repeat guard below.
+        aggregates = ["count", "sum", "avg", "min", "max"]
         alternating = [
             {"calls": [{"tool": "compute", "args": {"pipelines": [
-                {"name": f"n{i}", "source": "required", "stages": [{"op": "aggregate", "agg": "count"}]}
+                {"name": f"n{i}", "source": "required",
+                 "stages": [{"op": "aggregate", "agg": agg, "field": "credits"}]}
             ]}}]}
-            for i in range(10)
+            for i, agg in enumerate(aggregates * 2)
         ]
         model = _ScriptedModel(*alternating)
         result = await run_loop("q", model, _context(required=_coll("a")), max_turns=3)
         assert result.outcome == "exhausted"
         assert result.turns == 3
         assert "budget" in result.reason
+
+    async def test_re_deriving_under_a_new_name_is_not_progress(self) -> None:
+        """The measured failure: ten live runs spent their budget re-deriving
+        values they already held, each lap under a fresh name. Every lap produced
+        a non-empty fact, so the old no-progress guard -- which asked only
+        whether a fact arrived -- reset on every one of them and never fired.
+
+        A run that laps like this must stall at the limit, not at the clock.
+        """
+        lap = lambda name: {"calls": [{"tool": "compute", "args": {"pipelines": [
+            {"name": name, "source": "required", "stages": [{"op": "aggregate", "agg": "count"}]}
+        ]}}]}
+        model = _ScriptedModel(*[
+            lap(n) for n in ("prereq_groups", "required_groups", "obligation_groups",
+                             "met_groups", "eligible", "req_codes")
+        ])
+        result = await run_loop("q", model, _context(required=_coll("a", "b")), max_turns=6)
+        assert result.outcome == "stalled", "renaming an identical derivation is not progress"
+        assert result.turns <= NO_PROGRESS_LIMIT + 1, "it must stop at the limit, not the budget"
+
+    async def test_an_identical_repeated_call_is_not_progress(self) -> None:
+        """The other measured shape: the SAME search re-issued verbatim. One live
+        run sent one query sixteen times across twenty-four steps."""
+        same = {"calls": [{"tool": "compute", "args": {"pipelines": [
+            {"name": "n", "source": "required", "stages": [{"op": "aggregate", "agg": "count"}]}
+        ]}}]}
+        model = _ScriptedModel(*[same] * 6)
+        result = await run_loop("q", model, _context(required=_coll("a")), max_turns=6)
+        assert result.outcome == "stalled"
+        assert result.turns <= NO_PROGRESS_LIMIT + 1
+
+    async def test_a_repeat_is_reported_back_to_the_model(self) -> None:
+        """Stalling silently would waste the turns before the limit. The model is
+        told it already made the call, so it can change course instead."""
+        same = {"calls": [{"tool": "compute", "args": {"pipelines": [
+            {"name": "n", "source": "required", "stages": [{"op": "aggregate", "agg": "count"}]}
+        ]}}]}
+        model = _ScriptedModel(same, same, {"answer": "You have {n}."})
+        result = await run_loop("q", model, _context(required=_coll("a", "b")))
+        assert result.outcome == "answered"
+        assert "already ran" in model.prompts[-1], "the repeat must be named in the next prompt"
+
+    async def test_a_genuinely_new_derivation_still_counts(self) -> None:
+        """The guard must not punish real work: same source, different question."""
+        model = _ScriptedModel(
+            {"calls": [{"tool": "compute", "args": {"pipelines": [
+                {"name": "how_many", "source": "required", "stages": [{"op": "aggregate", "agg": "count"}]}
+            ]}}]},
+            {"calls": [{"tool": "compute", "args": {"pipelines": [
+                {"name": "total", "source": "required",
+                 "stages": [{"op": "aggregate", "agg": "sum", "field": "credits"}]}
+            ]}}]},
+            {"answer": "You have {how_many}."},
+        )
+        result = await run_loop("q", model, _context(required=_coll("a", "b")))
+        assert result.outcome == "answered"
+        assert result.turns == 3, "neither derivation should have been treated as a repeat"
 
 
 class TestWhatTheModelSees:

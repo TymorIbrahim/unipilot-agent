@@ -9,6 +9,14 @@ fact set and then spend its remaining turns not knowing it was done. A turn that
 produces no new fact and attempts no answer is not thinking -- it is stalling,
 and `NO_PROGRESS_LIMIT` ends it rather than letting the wall clock do it.
 
+**Wandering that LOOKS productive.** The guard above asks whether a fact
+arrived, and a re-derivation always produces one, so renaming the output made a
+lap invisible to it: ten measured runs showed the same `search_corpus` query
+issued sixteen times and the same pipeline recomputed five times, every lap
+resetting the no-progress counter. Progress is therefore counted against
+`_call_signatures` -- what a call DERIVES, with names stripped -- so a lap round
+the same derivation is what it is: no progress, reported back to the model.
+
 **Rejection with no legal move.** The old answer boundary could reject every
 formulation the model had, so it burned the budget rediscovering that. Rejections
 are bounded here AND carry the reason back, so a retry differs from its
@@ -107,6 +115,7 @@ async def run_loop(
     observations: list[str] = []
     idle_turns = 0
     rejections = 0
+    seen_derivations: set[str] = set()
     started = time.monotonic()
 
     for turn in range(1, max_turns + 1):
@@ -201,13 +210,30 @@ async def run_loop(
 
         gained = 0
         for call in calls:
+            signatures = _call_signatures(call)
+            # A call whose every derivation was already made this run cannot
+            # teach the loop anything: nothing writes, so re-running it returns
+            # what it returned before. It is still DISPATCHED -- the fact is
+            # refreshed and the model may legitimately want it under a new name
+            # -- but it does not count as progress, and the model is told.
+            repeated = bool(signatures) and all(s in seen_derivations for s in signatures)
+            seen_derivations.update(signatures)
+
             outcome = await dispatch(call, context)
             context.facts.update(outcome.facts)
             # Only facts with CONTENT count. Fetching an empty collection over
             # and over is the clearest possible case of busy-but-not-progressing,
             # and counting it as progress kept a live run alive for six turns
             # while it learned nothing.
-            gained += sum(1 for held in outcome.facts.values() if not _is_empty(held.value))
+            if not repeated:
+                gained += sum(1 for held in outcome.facts.values() if not _is_empty(held.value))
+            elif outcome.facts:
+                observations.append(
+                    f"You already ran {call.get('tool')}({_brief(call.get('args'), 90)}) this run and "
+                    f"it returned {', '.join(f'{n}={_describe(h.value)}' for n, h in outcome.facts.items())}. "
+                    "Repeating it cannot change the result. Use what you hold: take the next "
+                    "derivation step, or ANSWER with the facts you have."
+                )
             if outcome.proposal is not None:
                 # A proposal is TERMINAL: an action request's correct outcome is
                 # a change described for a person to approve, and once described
@@ -283,6 +309,43 @@ def _report_progress(on_progress: "Callable[[str], None]", reply: Mapping[str, A
 def _is_empty(value: Any) -> bool:
     records = getattr(value, "records", None)
     return records is not None and len(records) == 0
+
+
+def _call_signatures(call: Mapping[str, Any]) -> tuple[str, ...]:
+    """How a call DERIVES its result, with every name stripped out.
+
+    This is what `gained` is counted against, and the names have to go: the
+    wandering this guards against re-derives a value it already holds under a
+    fresh name, and a signature that included the name would call every lap new.
+    Measured over ten live runs, the waste was almost entirely literal repeats --
+    the same `search_corpus` query issued six times, the same `completed_numbers`
+    pipeline recomputed five times, `compute`+`interpret` on the same slug four
+    times before the run gave up.
+
+    `compute` is decomposed per PIPELINE rather than signed whole, because the
+    repeat hides at that granularity: a turn re-deriving `completed_numbers`
+    alongside one genuinely new pipeline is a different call each time but the
+    same derivation, and signing the call as a unit would miss it.
+    """
+    tool = str(call.get("tool"))
+    args = call.get("args") if isinstance(call.get("args"), Mapping) else {}
+
+    if tool == "compute":
+        pipelines = args.get("pipelines")
+        if isinstance(pipelines, Sequence) and not isinstance(pipelines, (str, bytes)):
+            return tuple(
+                "compute:" + json.dumps(
+                    {k: v for k, v in pipeline.items() if k != "name"},
+                    sort_keys=True, default=str,
+                )
+                for pipeline in pipelines
+                if isinstance(pipeline, Mapping)
+            )
+
+    # `as` is the caller's name for the result, not part of the derivation.
+    return (f"{tool}:" + json.dumps(
+        {k: v for k, v in args.items() if k != "as"}, sort_keys=True, default=str
+    ),)
 
 
 def _brief(args: Any, limit: int = 180) -> str:
