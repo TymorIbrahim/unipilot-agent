@@ -22,6 +22,8 @@ loop already feeds back, because a reason a model cannot act on wastes the retry
 
 from __future__ import annotations
 
+import re
+
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -75,6 +77,40 @@ class Violation:
 
     kind: str
     message: str
+
+
+_GROUP_ID = re.compile(r"\b\d{6,8}\.\d+\b")
+
+
+def check_no_group_identifiers(text: str) -> list[Violation]:
+    """A prerequisite GROUP id must never be shown as if it were a course.
+
+    Groups are labelled `<course>.<n>` -- `00970800.0`, `00970800.1` -- which is
+    bookkeeping, not something a student can register for. A live answer read
+    "the alternatives I derived are 00970800.0, 00970800.1", naming two things
+    that do not exist instead of the four course codes behind them.
+
+    Nothing else could catch it. The tokens were slotted from a real fact, so the
+    answer boundary passed them, and they LOOK like course codes to a reader --
+    which is precisely what makes them worse than a visible error.
+
+    The prompt already says to name alternatives by their `requires` codes and
+    mostly does; this is for when it does not.
+    """
+    found = _GROUP_ID.findall(text)
+    if not found:
+        return []
+    return [
+        Violation(
+            kind="group_identifier_shown",
+            message=(
+                f"the answer shows {', '.join(sorted(set(found))[:3])}, which are prerequisite "
+                "GROUP labels, not courses. A student cannot register for those. Project the "
+                "`requires` field of the edges and name the actual course codes, grouping them "
+                "as the choices they are."
+            ),
+        )
+    ]
 
 
 def check_gpa_in_range(gpa: float) -> list[Violation]:

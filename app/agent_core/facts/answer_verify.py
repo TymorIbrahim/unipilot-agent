@@ -33,6 +33,7 @@ from app.agent_core.facts.postconditions import (
     GradedCourse,
     Standing,
     Violation,
+    check_no_group_identifiers,
     check_gpa_in_range,
     check_grades_in_range,
     check_joint_floor,
@@ -64,12 +65,16 @@ def verify_answer(
     plan). Runs each check for which the typed inputs are present; a missing input
     SKIPS its check rather than guessing -- an unverifiable answer is not blocked,
     only an actually-violated one is."""
+    # Checked on EVERY answer, not just plans: a prerequisite question is not a
+    # plan, and that is exactly where group labels were being shown as courses.
+    violations = check_no_group_identifiers(answer.text)
+
     collections = list(_plan_collections(answer, facts))
     courses = [course for _, term_courses in collections for course in term_courses]
     if not courses:
-        return []  # Not a min-grade plan -- nothing these checks judge.
+        return violations  # Not a min-grade plan -- nothing the rest judges.
 
-    violations = list(check_grades_in_range(courses))
+    violations += list(check_grades_in_range(courses))
 
     # Each :detail collection is one rendered term; flag any whose load is really
     # the "(unscheduled)" overflow swept in.
