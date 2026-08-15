@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Union
 
@@ -83,8 +83,29 @@ _BINARY_OPS = frozenset({"join", "union", "difference"})
 def run_pipelines(
     pipelines: Sequence[Pipeline],
     env: Mapping[str, Collection],
+    resolve_predicates: "Callable[[Pipeline, Mapping[str, Any]], Any] | None" = None,
 ) -> dict[str, Outcome]:
-    """Evaluate every pipeline, in dependency order, isolating failures."""
+    """Evaluate every pipeline, in dependency order, isolating failures.
+
+    `resolve_predicates` is called for each pipeline just before it runs, with
+    everything available AT THAT POINT -- the working set plus every sibling
+    that has already succeeded. It exists because a `{"fact": ...}` inside a
+    `select` used to be resolved for the whole call up front, against the
+    working set alone, so a pipeline could use a sibling as its `source` but not
+    as a filter VALUE. The catalog tells the model to prefer one call carrying
+    several pipelines that reference each other, and half of that was a lie:
+
+        {"name": "mine",  "source": "cat",   "stages": [{"op": "project", ...}]}
+        {"name": "met",   "source": "edges", "stages": [{"op": "select",
+            "predicate": {..., "value": {"fact": "mine", "field": "..."}}}]}
+
+    came back "the filter refers to fact 'mine', which is not held" with `mine`
+    defined one line above. Measured cost: an eligibility run spent eight
+    consecutive turns rewriting that shape.
+
+    Returning a defect from the callback fails only that pipeline, so the others
+    in the call still land.
+    """
     by_name = {p.name: p for p in pipelines}
     order, cycle = _topological_order(pipelines, env)
 
@@ -105,6 +126,12 @@ def run_pipelines(
         if blocker is not None:
             results[name] = Blocked(name, waiting_on=blocker)
             continue
+
+        if resolve_predicates is not None:
+            defect = resolve_predicates(pipeline, available)
+            if defect is not None:
+                results[name] = Failed(name, defect)
+                continue
 
         outcome = _run_one(pipeline, available, bases)
         results[name] = outcome
@@ -129,6 +156,10 @@ def _referenced(pipeline: Pipeline) -> tuple[str, ...]:
         other = stage.args.get("other")
         if isinstance(other, str):
             names.append(other)
+        # A `{"fact": ...}` inside a filter is a dependency exactly like a
+        # `source` is. Without collecting it the sibling it names may not have
+        # run yet, and the filter fails for what is really an ordering bug.
+        names.extend(_fact_ref_names(stage.args.get("predicate")))
         # `Held` scalars inside an `extend` expression are dependencies too --
         # without collecting them the runner may evaluate a per-record formula
         # before the total it references exists, and the formula fails for a
@@ -136,6 +167,21 @@ def _referenced(pipeline: Pipeline) -> tuple[str, ...]:
         for expression in (stage.args.get("fields") or {}).values():
             names.extend(_held_names(expression))
     return tuple(names)
+
+
+def _fact_ref_names(predicate: Any) -> list[str]:
+    """Every fact a predicate filters BY, however deeply nested in and/or/not."""
+    if predicate is None:
+        return []
+    terms = getattr(predicate, "terms", None)
+    if terms is not None:
+        return [name for term in terms for name in _fact_ref_names(term)]
+    term = getattr(predicate, "term", None)
+    if term is not None:
+        return _fact_ref_names(term)
+    value = getattr(predicate, "value", None)
+    name = getattr(value, "name", None)
+    return [name] if isinstance(name, str) else []
 
 
 def _held_names(expression: Any) -> list[str]:

@@ -166,7 +166,7 @@ def _fact(
 
 
 def _resolve_fact_refs(
-    predicate: Predicate, context: DispatchContext
+    predicate: Predicate, facts: Mapping[str, HeldFact]
 ) -> Union[Predicate, ExpressionDefect]:
     """Replace every `FactRef` with the value of the fact it names.
 
@@ -179,12 +179,12 @@ def _resolve_fact_refs(
     if isinstance(predicate, Always):
         return predicate
     if isinstance(predicate, Not):
-        inner = _resolve_fact_refs(predicate.term, context)
+        inner = _resolve_fact_refs(predicate.term, facts)
         return inner if isinstance(inner, ExpressionDefect) else Not(inner)
     if isinstance(predicate, (And, Or)):
         terms = []
         for term in predicate.terms:
-            resolved = _resolve_fact_refs(term, context)
+            resolved = _resolve_fact_refs(term, facts)
             if isinstance(resolved, ExpressionDefect):
                 return resolved
             terms.append(resolved)
@@ -194,12 +194,12 @@ def _resolve_fact_refs(
         return predicate
 
     ref = predicate.value
-    held = context.facts.get(ref.name)
+    held = facts.get(ref.name)
     if held is None:
         return ExpressionDefect(
             0,
             f"the filter refers to fact '{ref.name}', which is not held. "
-            f"Available: {sorted(context.facts)}.",
+            f"Available: {sorted(facts)}.",
         )
 
     if ref.field is not None:
@@ -273,7 +273,7 @@ async def _find(name: str, args: Mapping[str, Any], context: DispatchContext) ->
 
     predicate = parse_predicate(args["predicate"]) if args.get("predicate") else None
     if predicate is not None:
-        predicate = _resolve_fact_refs(predicate, context)
+        predicate = _resolve_fact_refs(predicate, context.facts)
         if isinstance(predicate, ExpressionDefect):
             return _defect(name, predicate)
     result = await find(context.database, schema, predicate=predicate, limit=args.get("limit", 200))
@@ -429,14 +429,27 @@ def _canonicalise_codes(collection: Collection) -> Collection:
 
 async def _compute(_name: Any, args: Mapping[str, Any], context: DispatchContext) -> Dispatched:
     pipelines = parse_pipelines(args.get("pipelines", []))
-    # `select` inside a pipeline gets the same treatment as `find`'s predicate.
-    for pipeline in pipelines:
+
+    def resolve_predicates(pipeline: Any, available: Mapping[str, Any]) -> Any:
+        """Resolve this pipeline's filters against what exists WHEN IT RUNS.
+
+        Late, not up front, so a sibling defined in the same call can be filtered
+        by. `available` holds raw values while `_resolve_fact_refs` reads
+        `HeldFact`s, so siblings are wrapped -- with the basis they were computed
+        under where the working set knows it, and OFFICIAL_RECORD is never
+        assumed for something derived.
+        """
+        facts = dict(context.facts)
+        for name, value in available.items():
+            if name not in facts:
+                facts[name] = HeldFact(value=value, basis=Basis.SIMULATED)
         for stage in pipeline.stages:
             if "predicate" in stage.args:
-                resolved = _resolve_fact_refs(stage.args["predicate"], context)
+                resolved = _resolve_fact_refs(stage.args["predicate"], facts)
                 if isinstance(resolved, ExpressionDefect):
-                    return Dispatched(defects={pipeline.name: resolved})
+                    return resolved
                 stage.args["predicate"] = resolved
+        return None
     # EVERY held fact, scalars included. The runner publishes and consumes
     # scalars deliberately -- that is how "spring total vs autumn total" works --
     # and filtering them out here made a computed value unreferenceable by the
@@ -444,7 +457,7 @@ async def _compute(_name: Any, args: Mapping[str, Any], context: DispatchContext
     # could not express it.
     env = {name: held.value for name, held in context.facts.items()}
 
-    outcomes = run_pipelines(pipelines, env)
+    outcomes = run_pipelines(pipelines, env, resolve_predicates)
 
     produced: dict[str, HeldFact] = {}
     defects: dict[str, Defect] = {}
@@ -509,7 +522,7 @@ def _literal(
         return ExpressionDefect(
             0,
             f"'{key}' refers to fact '{value['fact']}', which is not held. "
-            f"Available: {sorted(context.facts)}.",
+            f"Available: {sorted(facts)}.",
         )
     if not isinstance(held.value, Scalar):
         return ExpressionDefect(
