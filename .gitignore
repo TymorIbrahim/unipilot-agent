@@ -2,8 +2,20 @@
 __pycache__/
 *.py[cod]
 .env
+.env*
 .env.local
+# The template carries no values and MUST stay tracked -- it is the only record
+# of which variables the app needs.
+!.env.example
 .vercel
+
+# A copy of .env was once saved as "Untitled" -- an editor default name, holding
+# a live LLM key, the Supabase service-role key and a Mongo URI with its
+# password, and NOT matched by any rule above. `git add -A` would have published
+# all of it. Credential copies do not reliably arrive with predictable names, so
+# the stray one is named here and the patterns above widened.
+/Untitled
+/Untitled*
 .pytest_cache/
 .coverage
 htmlcov/
