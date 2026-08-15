@@ -143,6 +143,51 @@ def check_no_edge_identifiers(text: str) -> list[Violation]:
     ]
 
 
+_ALTERNATIVES = re.compile(
+    r"(?:any one of|one of|either)\s+((?:\d{6,8}\s*(?:,|or|and)\s*)+\d{6,8})", re.IGNORECASE
+)
+_CODE = re.compile(r"\b\d{6,8}\b")
+
+
+def check_alternatives_are_distinct(text: str, question: str = "") -> list[Violation]:
+    """A choice between prerequisites must be a choice between DIFFERENT courses.
+
+    A live answer read "you meet 1 of 1 prerequisite groups. The course requires
+    1 requirement: any one of 00960211, 00960211" -- the course being asked
+    about, listed twice as its own prerequisite. The edges were projected on
+    `course` instead of `requires`, so every alternative collapsed onto the
+    target.
+
+    Two things make it checkable without knowing the curriculum: a choice whose
+    options are all the same course is not a choice, and no course is its own
+    prerequisite. Both hold for every course in every catalog, so this needs no
+    data -- which is what makes it safe to run on every answer.
+    """
+    asked = set(_CODE.findall(question or ""))
+    violations: list[Violation] = []
+    for listing in _ALTERNATIVES.findall(text or ""):
+        options = _CODE.findall(listing)
+        if len(options) > 1 and len(set(options)) == 1:
+            violations.append(
+                Violation(
+                    "degenerate_alternatives",
+                    f"the answer offers a choice between {options[0]} and itself. Alternatives "
+                    "come from the edges' `requires` field -- projecting `course` collapses every "
+                    "option onto the course being asked about.",
+                )
+            )
+        elif asked & set(options):
+            violations.append(
+                Violation(
+                    "self_prerequisite",
+                    f"the answer lists {sorted(asked & set(options))[0]} among its own "
+                    "prerequisites. No course requires itself; that is the `course` side of the "
+                    "edge, not the `requires` side.",
+                )
+            )
+    return violations
+
+
 def check_gpa_in_range(gpa: float) -> list[Violation]:
     """A GPA is a ratio in (0, 100]. Above 100 is the classic slotting slip --
     total_points landed where the ratio belonged."""

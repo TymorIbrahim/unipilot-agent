@@ -27,6 +27,8 @@ HERE = Path(__file__).parent
 # Running this as a script puts `evaluation/` on the path, not the repo root.
 sys.path.insert(0, str(HERE.parent))
 
+from checks import mentions_code, scores  # noqa: E402,F401 -- re-exported for probes
+
 GROUND_TRUTH = HERE / "ground_truth.json"
 RESULTS = HERE / "results.json"
 
@@ -35,40 +37,21 @@ COOLDOWN_S = 45.0
 SPACING_S = 8.0
 
 
-def mentions(text: str, needle: str) -> bool:
-    """Whether an answer really states `needle`.
-
-    Word-bounded on purpose: a plain substring test finds "20" inside "2025" and
-    scores a wrong answer correct. Numbers are matched so that 129.5 does not
-    satisfy a check for 29.5 either.
-    """
-    if re.fullmatch(r"-?\d+(\.\d+)?", needle):
-        # An edge id -- `00960211->00940224` -- contains a real course code, so a
-        # bare boundary check counts it as "the answer named 00940224". It did
-        # not: it named an internal key a student cannot register for. Those
-        # tokens are stripped before matching, and a post-condition refuses the
-        # answer outright.
-        text = re.sub(r"\b\d{6,8}\s*->\s*\d{6,8}\b", " ", text)
-        # The trailing guard must reject a number that CONTINUES (155 does not
-        # satisfy 15; 129.5 does not satisfy 29.5) without rejecting one that
-        # merely ends a sentence. A blanket `(?![\d.])` scored
-        # "requires one of 00940224, 00940226." as missing 00940226, and marked
-        # three correct answers wrong -- the full stop was doing it.
-        return re.search(rf"(?<![\d.]){re.escape(needle)}(?!\d)(?!\.\d)", text) is not None
-    return needle.lower() in text.lower()
-
-
 def score(answer: str | None, question: dict) -> tuple[str, str]:
-    """(verdict, why) for one answer."""
+    """(verdict, why) for one answer, judged by the shared checks.
+
+    The matching lives in `checks.py` because it was wrong five times when it
+    lived in whichever script needed it -- always in the pessimistic direction,
+    marking correct answers as failures.
+    """
     if not answer:
         return "no-answer", "the run produced no answer at all"
-    for bad in question.get("must_not_contain", []):
-        if mentions(answer, bad):
-            return "wrong", f"states {bad!r}, which is the known-wrong value"
-    missing = [need for need in question.get("must_contain", []) if not mentions(answer, need)]
-    if missing:
-        return "wrong", f"never states {', '.join(repr(m) for m in missing)}"
-    return "correct", "matches ground truth"
+    passed, why = scores(
+        answer,
+        must=tuple(question.get("must_contain", [])),
+        must_not=tuple(question.get("must_not_contain", [])),
+    )
+    return ("correct" if passed else "wrong"), why
 
 
 async def run_once(prompt: str, student_id: str) -> tuple[str | None, int, float]:

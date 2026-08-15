@@ -104,7 +104,70 @@ class TestTheScorerDoesNotCreditAnEdgeDump:
         from pathlib import Path
 
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "evaluation"))
-        from run_eval import mentions
+        from checks import mentions_code
 
-        assert not mentions("one of 00960211->00940224, 00960211->00940226", "00940224")
-        assert mentions("It requires one of 00940224, 00940226.", "00940224")
+        assert not mentions_code("one of 00960211->00940224, 00960211->00940226", "00940224")
+        assert mentions_code("It requires one of 00940224, 00940226.", "00940224")
+
+
+class TestAChoiceMustBeBetweenDifferentCourses:
+    """A live eligibility answer read:
+
+        "you meet 1 of 1 prerequisite groups. The course requires 1 requirement:
+         any one of 00960211, 00960211"
+
+    -- the course being asked about, offered twice as its own prerequisite. The
+    edges were projected on `course` rather than `requires`, collapsing every
+    alternative onto the target. Two facts make this checkable with no knowledge
+    of the curriculum: a choice whose options are identical is not a choice, and
+    no course is its own prerequisite.
+    """
+
+    QUESTION = "Am I eligible to take 00960211, and what does it require?"
+
+    def test_the_live_failure_is_flagged(self) -> None:
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        violations = check_alternatives_are_distinct(
+            "yes — you meet 1 of 1 groups. The course requires: any one of 00960211, 00960211.",
+            self.QUESTION,
+        )
+        assert violations and violations[0].kind == "degenerate_alternatives"
+
+    def test_a_course_listed_among_its_own_prerequisites_is_flagged(self) -> None:
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        violations = check_alternatives_are_distinct(
+            "It requires any one of 00960211, 00940224.", self.QUESTION
+        )
+        assert violations and violations[0].kind == "self_prerequisite"
+
+    def test_the_message_points_at_the_right_field(self) -> None:
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        violations = check_alternatives_are_distinct(
+            "any one of 00960211, 00960211", self.QUESTION
+        )
+        assert "requires" in violations[0].message
+
+    def test_a_real_choice_passes(self) -> None:
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        assert not check_alternatives_are_distinct(
+            "yes. It has 1 prerequisite group: any one of 00940224, 00940226.", self.QUESTION
+        )
+
+    def test_two_groups_of_real_alternatives_pass(self) -> None:
+        from app.agent_core.facts.postconditions import check_alternatives_are_distinct
+
+        assert not check_alternatives_are_distinct(
+            "You need 2 groups: any one of 00940423, 00940594, and any one of "
+            "00940424, 00940591.",
+            "What do I need to take before 00970800?",
+        )
+
+    def test_it_reaches_verify_answer(self) -> None:
+        violations = verify_answer(
+            _answer("requires any one of 00960211, 00960211."), {}, self.QUESTION
+        )
+        assert violations and violations[0].kind == "degenerate_alternatives"
