@@ -10,6 +10,16 @@ these is not finished.
 
 ## Ported
 
+`test_sources.py` is split in two. Its claims about REAL DATA are
+`tests/reachability/test_sources_against_data.py` (marked `supabase`), and its
+pure checks -- the semi-join and the nested declarations, neither of which had
+any coverage in the active suite -- are `tests/agent_core/facts/test_semi_join.py`.
+Its `TestObjectIdFilters` was deliberately NOT ported: it exercised the pass that
+turned a model's string filter into a BSON ObjectId, and Postgres stores those
+ids as text, so the pass was deleted rather than translated. One check is new
+and could not exist against Mongo -- every declared field must be a real COLUMN,
+which is knowable up front in a database that has a schema.
+
 `test_reachability.py` now lives at `tests/reachability/`, marked `supabase`
 and running green against the real database. **Run it before submitting**
 (`pytest -m supabase`): it is the only check that every advertised tool can
