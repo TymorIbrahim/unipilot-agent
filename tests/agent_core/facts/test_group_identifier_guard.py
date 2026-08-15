@@ -21,7 +21,7 @@ from app.agent_core.facts.types import Basis
 
 
 def _answer(text: str) -> Answer:
-    return Answer(text=text, basis=Basis.OFFICIAL_RECORD, used=("edges",))
+    return Answer(text=text, basis=Basis.OFFICIAL_RECORD, used=("edges",), citations=())
 
 
 class TestGroupLabelsAreCaught:
