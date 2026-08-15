@@ -20,6 +20,21 @@ ids as text, so the pass was deleted rather than translated. One check is new
 and could not exist against Mongo -- every declared field must be a real COLUMN,
 which is knowable up front in a database that has a schema.
 
+`test_find.py` is `tests/reachability/test_find_against_data.py`, marked
+`supabase` and green -- the Phase 5 gate (a truncated fetch reports
+`complete=false`, and an `aggregate` over it fails closed) now holds against
+Postgres.
+
+The port needed a real table. There is no throwaway database, and the dirty
+fixture data is the whole point: every column is TEXT, because "3.5" and
+"00940224" are the same shape of string and only the DECLARED schema separates a
+quantity from an identifier. Letting Postgres type `credits` as double precision
+would have tested nothing. So it creates `pytest_find_courses`, fills it with the
+same four rows, and drops it -- never `courses`, which is 2,613 rows the whole
+agent reads. One difference stands: Mongo let a document omit a field, a table
+cannot, so absence is NULL here and the distinction that matters (absent is not
+zero) is asserted the same way.
+
 `test_ledger.py` is `tests/reachability/test_ledger_against_data.py`, marked
 `supabase` and green. `MongoLedger` -> `SupabaseLedger` and `MongoConversations`
 -> `SupabaseConversations`; the guarantee is unchanged because it was never
