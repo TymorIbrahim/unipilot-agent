@@ -17,12 +17,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.agent_core.facts.adapter import build_adapter
+from app.agent_core.facts.adapter import ChatModelAdapter, build_adapter
 from app.agent_core.facts.answer import HeldFact
-from app.agent_core.facts.conversation import MongoConversations
+from app.agent_core.facts.conversation import SupabaseConversations
 from app.agent_core.facts.loop import MAX_TURNS, LoopResult, run_loop
 from app.agent_core.facts.types import Basis, Scalar, ScalarKind
-from app.agent_core.facts.wiring import build_context
+from app.agent_core.facts.wiring import ModelExtractor, build_context
 from app.agent_core.loop.course_names import course_codes_in, course_display_name
 
 # Outcome (facts loop) -> the frontend's retrieval_agent.status vocabulary.
@@ -67,6 +67,7 @@ async def run_advice(
     max_turns: int = MAX_TURNS,
     time_budget_s: float | None = None,
     conversation_id: str | None = None,
+    chat: Any | None = None,
 ) -> LoopResult:
     """Run the fact loop for one student's question.
 
@@ -82,23 +83,31 @@ async def run_advice(
     answer is appended when it concludes. Only the TEXT is carried -- facts are
     re-derived fresh every run, so a follow-up is grounded in live records, not
     in a snapshot from a previous turn.
-    """
-    from app.db.mongo import get_database
 
-    adapter = build_adapter(settings=settings)
+    `chat` REPLACES the client this would otherwise build. It exists so
+    `/api/execute` can hand in a traced client and have every model call --
+    the reasoning turns and the extractor's, which are built here rather than
+    by the caller -- land in one ordered `steps` log. Passing the client rather
+    than a finished adapter is what makes that possible: a finished adapter would
+    cover the reasoning turns and leave the extractor untraced, which is exactly
+    the kind of partial record the spec's `steps` must not be.
+    """
+    from app.db.postgres import get_database
+
+    adapter = build_adapter(settings=settings) if chat is None else ChatModelAdapter(chat)
     if adapter is None:
         # No credentials. A loop with no model cannot run; surface it as an
         # honest non-answer rather than crashing the route.
         return LoopResult(outcome="exhausted", reason="no language model is configured")
 
     database = await get_database()
-    context = build_context(database, settings)
+    context = build_context(database, settings, **_extractor_override(chat))
     context.facts["me"] = HeldFact(
         value=Scalar(ScalarKind.IDENTIFIER, user_id),
         basis=Basis.OFFICIAL_RECORD,
     )
 
-    store = MongoConversations(database)
+    store = SupabaseConversations(database)
     # Scope the conversation to the ASKING student, so one student's id can never
     # load another's thread even if a client sent a guessed conversation_id.
     thread_key = f"{user_id}:{conversation_id}" if conversation_id else None
@@ -124,6 +133,19 @@ async def run_advice(
         await store.append(thread_key, question, result.answer.text)
 
     return result
+
+
+def _extractor_override(chat: Any | None) -> dict[str, Any]:
+    """Route the prose extractor through the SAME client the caller supplied.
+
+    `build_wiring` builds its own extractor from `build_chat_llm`, which is
+    correct when nobody is watching and wrong when someone is: `interpret` and
+    `extract_list` are model calls, the spec requires every model call to appear
+    in `steps`, and an extractor holding a second, untraced client would make
+    those calls invisible. The override is empty when no client was supplied, so
+    the normal path is untouched.
+    """
+    return {"extractor": ModelExtractor(chat)} if chat is not None else {}
 
 
 def to_advice(result: LoopResult) -> Advice:

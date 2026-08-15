@@ -101,28 +101,37 @@ _catalog_names: dict[str, str] = {}
 
 
 async def load_catalog_names() -> int:
-    """Load code -> catalog title from Mongo, returning how many were loaded.
+    """Load code -> catalog title from the catalog table, returning how many.
 
     Degrades to an empty map on ANY failure, for the same reason `_name_index`
     does: a missing name costs readability, never correctness. It must never
     raise into an answer, and must never block service startup.
+
+    That tolerance hid a real break through the port. This read
+    `get_settings().courses_collection`, a setting this configuration does not
+    define, so every call raised `AttributeError`, was swallowed here, and left
+    the map empty -- every course rendered as a bare 8-digit code with nothing
+    in the logs but one warning. Fail-soft and fail-silent are not the same
+    thing, so the failure is now logged with the count it managed to load.
     """
     global _catalog_names
     try:
-        from app.config import get_settings
-        from app.db.mongo import get_database
+        from app.db.postgres import get_database
 
         database = await get_database()
-        collection = database[get_settings().courses_collection]
+        rows = await database.fetch(
+            'select "courseNumber", "title" from courses where "title" is not null'
+        )
         loaded: dict[str, str] = {}
-        async for doc in collection.find({}, {"courseNumber": 1, "title": 1}):
-            code, title = doc.get("courseNumber"), doc.get("title")
+        for row in rows:
+            code, title = row.get("courseNumber"), row.get("title")
             if isinstance(code, str) and isinstance(title, str) and title.strip():
                 loaded[code] = title.strip()
         _catalog_names = loaded
     except Exception:  # noqa: BLE001 -- readability fallback, never fatal
         logger.warning("catalog course names unavailable; falling back to bare codes", exc_info=True)
         return 0
+    logger.info("catalog course names loaded: %d", len(_catalog_names))
     return len(_catalog_names)
 
 

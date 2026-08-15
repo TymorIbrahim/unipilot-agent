@@ -46,26 +46,35 @@ class InMemoryLedger:
         self._spent.clear()
 
 
-class MongoLedger:
+class SupabaseLedger:
     """Durable, and atomic by construction.
 
-    The token IS the `_id`, so spending is a single `insert_one` and a duplicate
-    key error means it was already spent. There is no read-then-write window for
-    two concurrent attempts to slip through -- which a `find` followed by an
-    `insert` would have, and which is exactly the shape of a double-submit.
+    The token IS the primary key, so spending is a single
+    `insert ... on conflict do nothing` and the DATABASE arbitrates: exactly one
+    of two concurrent attempts inserts a row, and `rowcount` says which. There is
+    no read-then-write window for both to slip through -- which a select followed
+    by an insert would have, and which is exactly the shape of a double-submit.
+
+    Replaces `MongoLedger`, which spent a token with `insert_one` and caught
+    `DuplicateKeyError`. Same guarantee, same single round trip; the only reason
+    it could not stay is that it imported `pymongo`, a package this deployment
+    does not carry, so the one place the guarantee lived would have raised
+    ImportError the first time a confirmation was ever spent.
     """
 
-    def __init__(self, database: Any, collection: str = "spent_confirmations") -> None:
-        self._collection = database[collection]
+    def __init__(self, database: Any, table: str = "spent_confirmations") -> None:
+        self._database = database
+        self._table = table
 
     async def spend(self, token: str) -> bool:
-        from pymongo.errors import DuplicateKeyError
+        # `execute` returns Postgres' command tag -- "INSERT 0 1" when the row
+        # was written, "INSERT 0 0" when the token was already spent. Reading the
+        # count is what makes this a test AND a write in one statement.
+        tag = await self._database.execute(
+            f"insert into {self._table} (token) values ($1) on conflict (token) do nothing",
+            token,
+        )
+        return str(tag).strip().endswith("1")
 
-        try:
-            await self._collection.insert_one({"_id": token})
-            return True
-        except DuplicateKeyError:
-            return False
 
-
-__all__ = ["ConfirmationLedger", "InMemoryLedger", "MongoLedger"]
+__all__ = ["ConfirmationLedger", "InMemoryLedger", "SupabaseLedger"]

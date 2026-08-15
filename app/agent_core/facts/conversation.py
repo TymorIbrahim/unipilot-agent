@@ -19,7 +19,6 @@ test, durable for production, chosen explicitly rather than defaulted.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Protocol
 
 MAX_TURNS_REMEMBERED = 6
@@ -62,28 +61,44 @@ class InMemoryConversations:
         self._by_id.setdefault(conversation_id, []).append(Exchange(question, answer))
 
 
-class MongoConversations:
+class SupabaseConversations:
     """Durable. A follow-up resolves after a restart because the exchanges live
-    in Mongo, appended to one document per conversation."""
+    in Postgres.
 
-    def __init__(self, database: Any, collection: str = "agent_conversations") -> None:
-        self._collection = database[collection]
+    A ROW PER EXCHANGE, where `MongoConversations` pushed onto an array inside
+    one document per conversation. Two things improve by it: appending is a plain
+    INSERT with no read-modify-write, so two overlapping requests on one thread
+    cannot lose an exchange the way `$push` on a stale document could; and
+    `history` asks for its six rows in the database rather than fetching a
+    conversation of unbounded length to slice the tail off it.
+
+    `seq` is an identity column, so ordering is the insert order rather than
+    anything derived from a clock -- two exchanges appended in the same
+    millisecond still come back in the order they happened.
+    """
+
+    def __init__(self, database: Any, table: str = "agent_conversations") -> None:
+        self._database = database
+        self._table = table
 
     async def history(self, conversation_id: str) -> list[Exchange]:
-        document = await self._collection.find_one({"_id": conversation_id})
-        if not document:
-            return []
-        exchanges = document.get("exchanges", [])[-MAX_TURNS_REMEMBERED:]
-        return [Exchange(str(e.get("question", "")), str(e.get("answer", ""))) for e in exchanges]
+        # Newest-first with a LIMIT, then reversed: the tail is what
+        # MAX_TURNS_REMEMBERED means, and taking it in SQL keeps a long thread
+        # from crossing the wire to be thrown away.
+        rows = await self._database.fetch(
+            f"select question, answer from {self._table} "
+            "where conversation_id = $1 order by seq desc limit $2",
+            conversation_id,
+            MAX_TURNS_REMEMBERED,
+        )
+        return [Exchange(str(row["question"]), str(row["answer"])) for row in reversed(rows)]
 
     async def append(self, conversation_id: str, question: str, answer: str) -> None:
-        await self._collection.update_one(
-            {"_id": conversation_id},
-            {
-                "$push": {"exchanges": {"question": question, "answer": answer}},
-                "$set": {"updatedAt": datetime.now(timezone.utc)},
-            },
-            upsert=True,
+        await self._database.execute(
+            f"insert into {self._table} (conversation_id, question, answer) values ($1, $2, $3)",
+            conversation_id,
+            question,
+            answer,
         )
 
 
@@ -108,6 +123,6 @@ __all__ = [
     "Exchange",
     "InMemoryConversations",
     "MAX_TURNS_REMEMBERED",
-    "MongoConversations",
+    "SupabaseConversations",
     "render_history",
 ]
