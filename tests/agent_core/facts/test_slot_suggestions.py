@@ -60,3 +60,32 @@ class TestItNeverGuessesWildly:
     def test_a_correct_slot_is_unaffected(self) -> None:
         verdict = resolve_answer("You need {english_requirement}.", _facts(), "q")
         assert verdict.text == "You need 2 English courses."
+
+
+class TestATypoInAToolArgumentIsAlsoNamed:
+    """The answer boundary already suggested; a tool argument did not.
+
+    A live plan run asked `plan_term` for candidates from a fact called
+    `typed_candidates` while holding `candidates`. The refusal listed all
+    eighteen held names and the model spent a turn re-reading them -- the same
+    failure the answer-side suggester was written for, one layer down.
+    """
+
+    def test_the_live_near_miss_is_named(self) -> None:
+        from app.agent_core.facts.dispatch import DispatchContext
+
+        context = DispatchContext(facts=_facts())
+        defect = context.collection("completed_credit")
+        assert "Did you mean 'completed_credits'?" in defect.message
+
+    def test_the_full_list_survives_beside_it(self) -> None:
+        from app.agent_core.facts.dispatch import DispatchContext
+
+        defect = DispatchContext(facts=_facts()).collection("completed_credit")
+        assert "held:" in defect.message and "english_requirement" in defect.message
+
+    def test_an_unrelated_name_gets_no_guess(self) -> None:
+        from app.agent_core.facts.dispatch import DispatchContext
+
+        defect = DispatchContext(facts=_facts()).collection("totally_unrelated_thing")
+        assert "Did you mean" not in defect.message

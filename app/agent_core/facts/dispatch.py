@@ -83,7 +83,18 @@ class DispatchContext:
     def collection(self, name: str) -> Union[Collection, ExpressionDefect]:
         held = self.facts.get(name)
         if held is None:
-            return ExpressionDefect(0, f"no fact named '{name}'; held: {sorted(self.facts)}")
+            # The same near-miss repair the ANSWER boundary already does. A live
+            # plan run asked for `typed_candidates` while holding `candidates`,
+            # got the list of every held name, and spent a turn re-reading it --
+            # a list of a dozen names does not point at the one that is a prefix
+            # away. Suggests only; nothing is renamed.
+            from app.agent_core.facts.answer import _did_you_mean
+
+            return ExpressionDefect(
+                0,
+                f"no fact named '{name}'; held: {sorted(self.facts)}"
+                + _did_you_mean((name,), self.facts),
+            )
         if not isinstance(held.value, Collection):
             return ExpressionDefect(0, f"'{name}' is a scalar, but a collection is needed here")
         return held.value
