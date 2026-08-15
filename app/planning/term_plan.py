@@ -385,6 +385,24 @@ def _prereq_status(
 
 
 def _coreq_status(course: dict[str, Any], satisfied_numbers: set[str]) -> str:
+    """VESTIGIAL in this deployment: it returns "none" for every course, always.
+
+    `courses` has no `corequisitesText` column, so the read below is always
+    None, `needed` is always empty, and the answer is always "none" -- which the
+    model is handed as though it meant "this course has no corequisites" rather
+    than "no corequisite data exists here". The same silent degradation as the
+    `prereqStatus` and no-additional-credit defects: a rule reading a column
+    that is not there, failing open with a reassuring value.
+
+    Left unwired DELIBERATELY, unlike those two. Measured against UniPilot's
+    Mongo on 2026-08-15: 3 of 2,613 courses carry the field at all, and one of
+    those three (00940333) names two corequisites that exist in no catalog. Two
+    usable rows do not earn a column, a backfill and a migration.
+
+    So this is a note, not a fix. If `corequisitesText` is ever seeded, this
+    starts working with no change -- and until then the honest reading of a
+    "none" here is "not checked".
+    """
     needed = extract_course_numbers_from_text(course.get("corequisitesText"))
     if not needed:
         return "none"
