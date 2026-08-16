@@ -260,7 +260,27 @@ def _as_kind(raw: Any, kind: ScalarKind) -> Any:
         return str(raw) if isinstance(raw, (str, int)) else None
 
     if kind is ScalarKind.TEXT:
-        return raw if isinstance(raw, str) else None
+        if isinstance(raw, str):
+            return raw
+        # A number read out of a passage IS text. Refusing it was a real cost:
+        # asked "what is the English language requirement", the model expects a
+        # sentence, the extractor returns 2, and the answer came back
+        # "'regulations-undergraduate' does not answer ... with a text: the value
+        # found (2) is not a text" -- a refusal that also says re-reading the
+        # page is pointless, so the model went looking for another source. Runs
+        # that hit it took 11-15 steps against a usual 4.
+        #
+        # Safe because TEXT is the loosest kind and `_appears_in` has already
+        # confirmed the value is in the passage. Widening it discards nothing:
+        # a caller wanting arithmetic asks for QUANTITY, which still refuses a
+        # non-number.
+        if isinstance(raw, bool):
+            return None  # "True" is not what anyone reading a passage meant
+        if isinstance(raw, int):
+            return str(raw)
+        if isinstance(raw, float):
+            return str(int(raw)) if raw.is_integer() else str(raw)
+        return None
 
     if kind is ScalarKind.BOOL:
         if isinstance(raw, bool):
