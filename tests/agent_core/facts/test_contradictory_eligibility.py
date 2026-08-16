@@ -18,7 +18,16 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent_core.facts.postconditions import check_eligibility_is_not_self_contradictory as check
+from app.agent_core.facts.postconditions import (
+    check_eligibility_is_not_self_contradictory as _check,
+)
+
+ASKED_ONE = "Am I eligible to take 01040174?"
+ASKED_TWO = "Am I eligible for 00960211 and 01040174?"
+
+
+def check(answer: str, question: str = ASKED_ONE):
+    return _check(answer, question)
 
 
 class TestTheLiveContradiction:
@@ -50,20 +59,38 @@ class TestCoherentAnswersPass:
         assert not check(answer)
 
 
-class TestItDoesNotBlockAMultiCourseAnswer:
-    def test_two_courses_with_opposite_verdicts_are_fine(self) -> None:
-        """The false positive the first version produced. These halves describe
-        DIFFERENT courses, and refusing it ends the run with nothing rather than
-        with something imperfect."""
-        assert not check(
-            "You are eligible for 00960211, but you meet 0 of 1 groups for 01040174."
+class TestItIsScopedByTheQuestion:
+    """The first version scoped by the ANSWER and disabled itself.
+
+    It skipped any answer naming more than one course code, to spare a genuine
+    two-course answer. But a good eligibility answer ALWAYS names the target and
+    the prerequisites that would satisfy it -- three codes or more -- so the
+    guard never fired once, and this shipped and scored PASS:
+
+        "You are eligible for 01040174, because you meet 0 of 1 prerequisite
+         groups. To make it yes, pass any one of 01040066, 01040166."
+    """
+
+    def test_the_answer_that_shipped_is_caught(self) -> None:
+        assert check(
+            "You are eligible for 01040174, because you meet 0 of 1 prerequisite groups. "
+            "To make it yes, pass any one of 01040066, 01040166."
         )
 
-    def test_the_limit_is_deliberate(self) -> None:
-        """Stated as a test so it is a known gap rather than a surprise: a
-        contradiction inside a multi-course answer is NOT caught, because
-        deciding which clause owns which code needs a parser this does not have.
-        """
-        assert not check(
-            "For 00960211 and 01040174 you meet 0 groups, so you are eligible."
+    def test_naming_the_prerequisites_does_not_buy_an_exemption(self) -> None:
+        """The regression in one line: extra codes in the answer are what a GOOD
+        answer has, so they must not switch the check off."""
+        assert check(
+            "You are eligible, though you meet 0 of 1 groups; pass 01040066 or 01040166."
         )
+
+    def test_two_courses_asked_about_are_left_alone(self) -> None:
+        """Which clause owns which verdict needs a parser this does not have,
+        and blocking a correct answer is the worse error."""
+        assert not check(
+            "You are eligible for 00960211, but you meet 0 of 1 groups for 01040174.",
+            ASKED_TWO,
+        )
+
+    def test_no_course_in_the_question_stands_aside(self) -> None:
+        assert not check("You are eligible, and you meet 0 of 1 groups.", "Am I eligible?")

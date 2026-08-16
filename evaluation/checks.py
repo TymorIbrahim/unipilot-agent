@@ -45,7 +45,13 @@ _DENIALS = (
 _DENIES = re.compile("|".join(_DENIALS), re.IGNORECASE)
 
 _AFFIRMS = re.compile(
-    r"\byes\b|\byou are eligible\b|\byou meet\b|\byou can take\b"
+    # `you meet` used to be bare, which made "you meet 0 of 1 prerequisite
+    # groups" -- a REFUSAL -- read as an affirmation. Harmless until the
+    # contradiction check started asking whether both fired at once, and then it
+    # scored every correct denial as self-contradictory. The count is what makes
+    # it an affirmation, so the count is in the pattern.
+    r"\byes\b|\byou are eligible\b|\byou can take\b"
+    r"|\b(?:you\s+)?(?:have\s+)?(?:meet|meets|met)\s+[1-9]\d*\s+of\b"
     # A projection affirms without ever saying "yes": "it has run every spring,
     # so it is expected again". Scoring that as a non-answer is the pessimistic
     # failure this file exists to prevent.
@@ -162,6 +168,13 @@ def scores(
     for value in must_not:
         if states_number(text, value):
             return "wrong", f"states {value}, which is the known-wrong value"
+    if stance == "deny" and claims_no(text) and claims_yes(text):
+        # Both halves present under a stance is not a pass, it is a
+        # contradiction. Measured: "You are eligible for 01040174, because you
+        # meet 0 of 1 prerequisite groups" scored CORRECT, because `claims_no`
+        # matched "meet 0 of" and nothing looked further. An answer a reader can
+        # take either way is worse than a plainly wrong one.
+        return "wrong", "affirms and denies in the same answer"
     if stance == "affirm":
         # Order matters: "will not be offered" contains "be offered", so the
         # negative claim has to be tested first or an inversion scores as a pass.

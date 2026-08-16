@@ -233,7 +233,9 @@ _CLAIMS_INELIGIBLE = re.compile(
 )
 
 
-def check_eligibility_is_not_self_contradictory(text: str) -> list[Violation]:
+def check_eligibility_is_not_self_contradictory(
+    text: str, question: str = ""
+) -> list[Violation]:
     """An answer must not count zero met groups and then declare eligibility.
 
     Live answer, shipped:
@@ -246,20 +248,25 @@ def check_eligibility_is_not_self_contradictory(text: str) -> list[Violation]:
     the end takes "eligible", and the run that produced it scored as CORRECT
     because the checker read only the leading word.
 
-    Deliberately narrow, and narrowed AGAIN after a false positive. "You are
-    eligible for 00960211 but you meet 0 of 1 groups for 01040174" is an
-    ordinary answer about two courses, and the first version refused it: both
-    halves are present, they simply describe different courses.
+    Scoped by the QUESTION, not by the answer. The first version skipped any
+    answer naming more than one course code, to spare "you are eligible for
+    00960211 but you meet 0 of 1 groups for 01040174" -- two courses, two
+    verdicts, no contradiction. That exemption disabled the check entirely: a
+    good eligibility answer ALWAYS names the target course and the prerequisites
+    that would satisfy it, so every real case has three or more codes in it. The
+    guard went in, looked correct, and never fired once. It let this through:
 
-    So this fires only when the answer is about ONE course. Deciding which
-    clause belongs to which code needs a parser this does not have, and refusing
-    a correct multi-course answer is the worse error -- the run ends with
-    nothing rather than with something imperfect. A contradiction inside a
-    multi-course answer is not caught; that limit is real and is the price of
-    not blocking good answers.
+        "You are eligible for 01040174, because you meet 0 of 1 prerequisite
+         groups. To make it yes, pass any one of 01040066, 01040166."
+
+    Counting what the QUESTION asks about instead gets both right. One course
+    asked -> every verdict in the answer is about it, so "eligible" beside "met
+    0" is a contradiction. Two or more asked -> which clause owns which verdict
+    needs a parser this does not have, and blocking a correct answer is the
+    worse error, so it stands aside.
     """
     body = text or ""
-    if len(set(_CODE.findall(body))) > 1:
+    if len(set(_CODE.findall(question or ""))) != 1:
         return []
     if not _MET_NONE.search(body):
         return []

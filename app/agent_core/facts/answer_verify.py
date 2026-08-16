@@ -74,7 +74,7 @@ def verify_answer(
     violations = check_no_group_identifiers(answer.text)
     violations += check_no_edge_identifiers(answer.text)
     violations += check_alternatives_are_distinct(answer.text, question)
-    violations += check_eligibility_is_not_self_contradictory(answer.text)
+    violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)
 
     collections = list(_plan_collections(answer, facts))

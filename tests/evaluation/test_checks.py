@@ -214,3 +214,69 @@ class TestStance:
     def test_no_stance_leaves_scoring_unchanged(self) -> None:
         verdict, _ = scores(self.INVERTED, must=("00940412",), stance=None)
         assert verdict == "correct"
+
+
+class TestAContradictionIsNotAPass:
+    """Scored CORRECT on a live run, and it is neither correct nor wrong-and-clear.
+
+        "You are eligible for 01040174, because you meet 0 of 1 prerequisite
+         groups. To make it yes, pass any one of 01040066, 01040166."
+
+    `claims_no` matched "meet 0 of", the deny stance was satisfied, and nothing
+    looked further. A reader who takes the first clause and a reader who takes
+    the second get opposite advice.
+    """
+
+    SHIPPED = (
+        "You are eligible for 01040174, because you meet 0 of 1 prerequisite groups. "
+        "To make it yes, pass any one of 01040066, 01040166."
+    )
+
+    def test_the_shipped_contradiction_is_wrong(self) -> None:
+        verdict, why = scores(self.SHIPPED, must=("01040066", "01040166"), stance="deny")
+        assert verdict == "wrong"
+        assert "affirms and denies" in why
+
+    def test_a_coherent_denial_still_passes(self) -> None:
+        verdict, _ = scores(
+            "No - 01040174 needs any one of 01040066, 01040166, and you meet 0 of 1 groups.",
+            must=("01040066", "01040166"),
+            stance="deny",
+        )
+        assert verdict == "correct"
+
+    def test_not_eligible_is_not_read_as_an_affirmation(self) -> None:
+        """The obvious way to break this: "you are not eligible" contains
+        "eligible"."""
+        verdict, _ = scores(
+            "You are not eligible; you meet 0 of 1 groups. Pass 01040066 or 01040166.",
+            must=("01040066", "01040166"),
+            stance="deny",
+        )
+        assert verdict == "correct"
+
+    def test_a_clean_affirmation_is_untouched(self) -> None:
+        verdict, _ = scores(
+            "Yes - you meet 1 of 1 prerequisite groups; it needs any one of 00940224, 00940226.",
+            must=("00940224", "00940226"),
+        )
+        assert verdict == "correct"
+
+
+class TestMeetingNoneIsNotAnAffirmation:
+    """`_AFFIRMS` carried a bare `you meet`, so "you meet 0 of 1 prerequisite
+    groups" -- a refusal -- read as an affirmation. Invisible until the
+    contradiction check asked whether both fired at once, at which point every
+    correct denial scored as self-contradictory."""
+
+    def test_meeting_zero_does_not_affirm(self) -> None:
+        assert not claims_yes("you meet 0 of 1 prerequisite groups.")
+        assert claims_no("you meet 0 of 1 prerequisite groups.")
+
+    def test_meeting_some_still_affirms(self) -> None:
+        assert claims_yes("You meet 1 of 1 prerequisite groups.")
+        assert claims_yes("You have met 2 of 2 groups.")
+
+    def test_the_bare_word_no_longer_counts(self) -> None:
+        """"meet" on its own says nothing about the verdict."""
+        assert not claims_yes("Let us meet the requirements listed below.")
