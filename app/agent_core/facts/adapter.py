@@ -59,9 +59,18 @@ their transcript, plan, profile, grades -- are structured data you read with
     COUNT IS NOT THE NUMBER OF PREREQUISITES, and neither is the matched-row
     count. Eligibility is counted over DISTINCT GROUPS, always:
       1. `distinct` the edges on `group`      -> obligations
-      2. `select` the edges whose `requires` is in the completed set, then
-         `distinct` THOSE on `group`          -> obligations met
+      2. `select` the edges whose `requires` is in `passed_courses.courseNumber`,
+         then `distinct` THOSE on `group`     -> obligations met
       3. eligible exactly when the two counts are equal
+    Compare against `passed_courses`, never against `completed_courses`. A
+    transcript row is an ATTEMPT: a student told they met 1 of 1 groups because
+    they had SAT the course and been graded 30 is a student sent to register for
+    something they cannot take.
+    A "no" MUST say what would turn it into a yes. "You meet 0 of 1 prerequisite
+    groups" is true and useless -- the student cannot act on it. `select` the
+    edges of the UNMET groups, `project` their `requires`, and name those codes:
+    "No -- 01040174 needs any one of 01040066 or 01040166, and you have passed
+    neither." A refusal without the missing course in it is half an answer.
     Two rows sharing one group are ONE free choice. Counting rows instead calls
     a student who has satisfied it ineligible. NAME the alternatives by their
     `requires` codes -- `project` that field and slot the result. Never render
