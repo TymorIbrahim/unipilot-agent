@@ -6,7 +6,7 @@
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
     "steps": 2,
-    "elapsed_s": 8.2
+    "elapsed_s": 10.3
   },
   {
     "id": "credits_completed",
@@ -14,8 +14,8 @@
     "verdict": "correct",
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
-    "steps": 3,
-    "elapsed_s": 7.1
+    "steps": 2,
+    "elapsed_s": 5.0
   },
   {
     "id": "credits_completed",
@@ -24,141 +24,141 @@
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
     "steps": 2,
-    "elapsed_s": 4.6
+    "elapsed_s": 4.7
   },
   {
     "id": "credits_required_and_remaining",
     "run": 0,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits, and you still need 25.5 credits.",
-    "steps": 3,
-    "elapsed_s": 12.1
+    "answer": "Your degree requires 155 credits total, and you still need 25.5 credits.",
+    "steps": 2,
+    "elapsed_s": 6.9
   },
   {
     "id": "credits_required_and_remaining",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits in total, and you still need 25.5.",
+    "answer": "Your degree requires 155 credits, and you still need 25.5.",
     "steps": 2,
-    "elapsed_s": 7.0
+    "elapsed_s": 9.0
   },
   {
     "id": "credits_required_and_remaining",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits, and you still need 25.5.",
+    "answer": "Your degree requires 155 credits in total, and you still need 25.5 credits.",
+    "steps": 2,
+    "elapsed_s": 9.4
+  },
+  {
+    "id": "english_requirement",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You cannot graduate without completing Cannot graduate without completing 2 English courses.",
+    "steps": 13,
+    "elapsed_s": 111.7
+  },
+  {
+    "id": "english_requirement",
+    "run": 1,
+    "verdict": "incomplete",
+    "why": "right answer, but never states 2",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 8,
+    "elapsed_s": 45.1
+  },
+  {
+    "id": "english_requirement",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need 2 English-language courses to graduate.",
+    "steps": 10,
+    "elapsed_s": 42.2
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Yes. 00960211 has 1 prerequisite group, and the requirement is any one of 00940224, 00940226. You have met 1 of 1 groups, so you may take it.",
+    "steps": 4,
+    "elapsed_s": 31.5
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Yes — you are eligible. You meet 1 of 1 prerequisite groups. It requires 1 prerequisite group: any one of 00940224, 00940226.",
+    "steps": 5,
+    "elapsed_s": 43.0
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Yes. Course 00960211 exists in the catalog, and it has 1 prerequisite group: any one of 00940224, 00940226. You meet 1 of 1 groups, with 0 unmet edges.",
+    "steps": 5,
+    "elapsed_s": 36.7
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "No -- 01040174 needs 01040066, 01040166; you have passed neither.",
+    "steps": 4,
+    "elapsed_s": 30.0
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You are not eligible. You need any one of 01040066, 01040166.",
+    "steps": 3,
+    "elapsed_s": 24.4
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "No — you meet 0 of 1 prerequisite groups. For 01040174, you need any one of 01040066, 01040166.",
+    "steps": 4,
+    "elapsed_s": 37.9
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Will be offered next spring: yes.",
+    "steps": 3,
+    "elapsed_s": 16.1
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "For the course you asked about: yes.",
     "steps": 3,
     "elapsed_s": 13.1
   },
   {
-    "id": "english_requirement",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "To graduate, you must satisfy 2 English-language courses.",
-    "steps": 8,
-    "elapsed_s": 27.7
-  },
-  {
-    "id": "english_requirement",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You must satisfy 2 English-language courses to graduate.",
-    "steps": 6,
-    "elapsed_s": 16.4
-  },
-  {
-    "id": "english_requirement",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "The English language requirement to graduate is 2 English-language courses.",
-    "steps": 7,
-    "elapsed_s": 23.1
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "Yes — 00960211 is eligible: you meet 1 of 1 prerequisite groups. It requires any one of 00940224, 00940226.",
-    "steps": 5,
-    "elapsed_s": 51.8
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "yes — you meet 1 of 1 prerequisite groups. 00960211 requires any one of 00940224, 00940226.",
-    "steps": 5,
-    "elapsed_s": 38.0
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "Yes — you can take 00960211; you meet 1 prerequisite group. It requires any one of 00940224, 00940226.",
-    "steps": 7,
-    "elapsed_s": 74.9
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "No — 01040174 exists in the catalog, and it needs any one of 01040066, 01040166; you have passed 0 of 1 prerequisite groups.",
-    "steps": 6,
-    "elapsed_s": 39.3
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "no -- 01040174 needs any one of 01040066, 01040166, and you meet 0 of 1 prerequisite groups.",
-    "steps": 4,
-    "elapsed_s": 26.4
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You are eligible for 01040174, because you meet 0 of 1 prerequisite groups. To make it yes, pass any one of 01040066, 01040166.",
-    "steps": 5,
-    "elapsed_s": 60.8
-  },
-  {
     "id": "forecast_00940412_spring",
-    "run": 0,
+    "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "The course is offered next spring: yes.",
+    "answer": "00940412 is forecast to be offered next spring: yes.",
     "steps": 3,
-    "elapsed_s": 23.2
-  },
-  {
-    "id": "forecast_00940412_spring",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "The course will be offered next spring: yes.",
-    "steps": 2,
-    "elapsed_s": 9.7
-  },
-  {
-    "id": "forecast_00940412_spring",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "00940412 will be offered next spring: yes.",
-    "steps": 4,
-    "elapsed_s": 16.7
+    "elapsed_s": 13.8
   }
 ]

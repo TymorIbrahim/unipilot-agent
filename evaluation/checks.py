@@ -187,6 +187,13 @@ def scores(
             return "wrong", "never states the negative, and the data says no"
     missing = [v for v in must if not states_number(text, v)]
     if missing:
+        # A give-up is not a thin answer. "I wasn't able to work that out from
+        # your records" scored `incomplete` -- "right answer, but never states
+        # 2" -- for a run that answered nothing at all. Every question here is
+        # answerable from the data by construction, so declining one is a
+        # failure, and calling it right-but-thin flatters the score.
+        if denies_knowledge(text):
+            return "wrong", "declined to answer a question the data supports"
         return "incomplete", f"right answer, but never states {', '.join(str(m) for m in missing)}"
     return "correct", "matches ground truth"
 

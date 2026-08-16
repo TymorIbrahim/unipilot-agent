@@ -280,3 +280,46 @@ class TestMeetingNoneIsNotAnAffirmation:
     def test_the_bare_word_no_longer_counts(self) -> None:
         """"meet" on its own says nothing about the verdict."""
         assert not claims_yes("Let us meet the requirements listed below.")
+
+
+class TestAGiveUpIsNotAThinAnswer:
+    """Scored `incomplete` -- "right answer, but never states 2" -- for a run
+    that answered nothing:
+
+        "I wasn't able to work that out from your records with confidence."
+
+    Every question in the ground truth is answerable from the data by
+    construction, so declining one is a failure. Filing it beside genuinely
+    correct-but-terse answers flatters the score in the direction that matters.
+    """
+
+    GAVE_UP = "I wasn't able to work that out from your records with confidence."
+
+    def test_the_refusal_is_wrong_not_thin(self) -> None:
+        verdict, why = scores(self.GAVE_UP, must=("2",))
+        assert verdict == "wrong"
+        assert "declined" in why
+
+    def test_a_genuinely_thin_answer_is_still_thin(self) -> None:
+        verdict, _ = scores(
+            "No. You meet 0 of 1 prerequisite groups.",
+            must=("01040066", "01040166"),
+            stance="deny",
+        )
+        assert verdict == "incomplete"
+
+    def test_a_correct_answer_is_unaffected(self) -> None:
+        verdict, _ = scores("You need 2 English-language courses.", must=("2",))
+        assert verdict == "correct"
+
+    def test_a_denial_of_eligibility_is_not_a_denial_of_knowledge(self) -> None:
+        """The boundary that matters: "you have passed neither" and "you are not
+        eligible" are ANSWERS, and must not be swept up as give-ups."""
+        for answer in (
+            "No -- 01040174 needs 01040066, 01040166; you have passed neither.",
+            "You are not eligible. You need any one of 01040066, 01040166.",
+        ):
+            verdict, why = scores(
+                answer, must=("01040066", "01040166"), stance="deny"
+            )
+            assert verdict == "correct", f"{answer!r} -> {why}"
