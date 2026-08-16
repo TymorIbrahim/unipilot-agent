@@ -364,7 +364,27 @@ def _tidy_affirmations(text: str) -> str:
     answer CLAIMS. Both rewrites drop a redundant word and touch nothing else.
     """
     tidied = _DOUBLED_YES.sub(lambda m: m.group(1), text)
-    return _STRANDED_YES.sub(lambda m: f"{m.group(1)} ", tidied)
+    tidied = _STRANDED_YES.sub(lambda m: f"{m.group(1)} ", tidied)
+    return _STUTTERED_PHRASE.sub(lambda m: m.group(1), tidied)
+
+
+_STUTTERED_PHRASE = re.compile(r"\b(\w+(?:\s+\w+){2,})\s+\1\b", re.IGNORECASE)
+"""A phrase written twice, back to back, because a TEXT slot already contained it.
+
+The bool case above wearing a longer coat. `interpret` returned the English
+requirement as the sentence "Cannot graduate without completing 2 English
+courses", the model wrote a sentence around it, and the answer shipped as:
+
+    "You cannot graduate without completing Cannot graduate without completing
+     2 English courses."
+
+Correct, grounded, and unreadable -- and it scored as a PASS, because the number
+it had to state was in there.
+
+Three words minimum and immediately adjacent, so it only ever collapses a
+stutter. Two-word repeats occur in ordinary prose ("had had", "that that"), and
+a repeat separated by other words is usually deliberate. Like the rewrites
+above, this drops a redundancy and changes nothing the answer CLAIMS."""
 
 
 def _is_empty(value: Union[Collection, Scalar]) -> bool:
