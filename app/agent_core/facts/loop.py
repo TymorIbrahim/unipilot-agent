@@ -450,7 +450,11 @@ def _prompt(
     # `me` arrives seeded by the caller and reads as an opaque id. Naming it
     # costs one line and saves the model inferring what to filter by.
     whose = (
-        "  (`me` is the id of the student asking -- filter their records by it)\n"
+        "  (`me` is the id of the student asking -- filter their records by it.\n"
+        "   Any other fact above with no derivation came from their profile and is "
+        "ALREADY YOURS:\n"
+        "   re-fetching `student_profiles` to get it costs two turns and tells you "
+        "nothing new.)\n"
         if "me" in context.facts
         else ""
     )

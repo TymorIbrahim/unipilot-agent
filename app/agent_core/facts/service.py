@@ -137,6 +137,7 @@ async def run_advice(
         value=Scalar(ScalarKind.IDENTIFIER, user_id),
         basis=Basis.OFFICIAL_RECORD,
     )
+    _seed_profile_facts(context, profile)
 
     store = SupabaseConversations(database)
     # Scope the conversation to the ASKING student, so one student's id can never
@@ -192,9 +193,51 @@ async def _profile_of(database: Any, user_id: str) -> Any:
     hat.
     """
     rows = await database.fetch(
-        'select "userId", "programType" from student_profiles where "userId" = $1', user_id
+        'select "userId", "programType", "programSlug", "catalogYear", '
+        '"currentSemesterCode", "maxCreditsPerSemester" '
+        'from student_profiles where "userId" = $1',
+        user_id,
     )
     return rows[0] if rows else None
+
+
+_SEEDED_PROFILE_FIELDS: tuple[tuple[str, str, ScalarKind], ...] = (
+    ("programSlug", "program_slug", ScalarKind.IDENTIFIER),
+    ("catalogYear", "catalog_year", ScalarKind.QUANTITY),
+    ("currentSemesterCode", "current_semester", ScalarKind.IDENTIFIER),
+    ("maxCreditsPerSemester", "max_credits_per_semester", ScalarKind.QUANTITY),
+)
+"""Profile columns handed to the loop as opening facts.
+
+This query already ran, to prove the student exists and to pick the right
+rulebook. It was selecting two of its columns and discarding the rest -- and
+then every planning run opened like this:
+
+    turn 1  find    -> profile          re-fetching the row we already held
+    turn 2  compute -> program_slug     unpacking it
+    turn 3  ...the actual work begins
+
+Two model calls per planning question to re-derive something the server had in
+hand before the loop started. Widening the select costs no extra round trip and
+no extra tokens; seeding the results deletes both turns.
+
+Only stable identity fields, deliberately. Anything the student's ANSWER depends
+on -- credits, grades, courses -- stays behind a tool call, so it arrives with a
+basis and a completeness the loop can reason about rather than as a fact that
+appeared from nowhere.
+"""
+
+
+def _seed_profile_facts(context: Any, profile: Any) -> None:
+    for column, fact_name, kind in _SEEDED_PROFILE_FIELDS:
+        value = profile[column] if column in profile.keys() else None
+        if value in (None, ""):
+            continue  # absent beats invented; the model can still `find` it
+        context.facts[fact_name] = HeldFact(
+            value=Scalar(kind, float(value) if kind is ScalarKind.QUANTITY else str(value)),
+            basis=Basis.OFFICIAL_RECORD,
+            derivation="from the student's profile, read when the run started",
+        )
 
 
 def _audience_of_profile(profile: Any) -> str | None:
