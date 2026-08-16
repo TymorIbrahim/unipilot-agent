@@ -302,7 +302,7 @@ def _offering_for(
 
 def _overlapping_credited(
     number: str, overlap_groups: list[set[str]], credited_raw: set[str]
-) -> Union[str, None]:
+) -> str | None:
     """The credited course `number` grants no additional credit alongside, if any.
 
     Returns the course rather than a bool so the refusal can name it. A student

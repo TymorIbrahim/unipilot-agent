@@ -545,10 +545,19 @@ def _literal(
         )
     held = context.facts.get(value["fact"])
     if held is None:
+        # `sorted(facts)` -- an undefined name, on the one line that runs when
+        # the model gets an argument wrong. Instead of "not held; available:
+        # [...]" it raised NameError, the catch-all turned that into "could not
+        # run with those arguments", and the model had nothing to repair from.
+        # Measured on `interpret`: the runs that hit it took 10-11 steps against
+        # a usual 4, and one gave up entirely.
+        from app.agent_core.facts.answer import _did_you_mean
+
         return ExpressionDefect(
             0,
             f"'{key}' refers to fact '{value['fact']}', which is not held. "
-            f"Available: {sorted(facts)}.",
+            f"Available: {sorted(context.facts)}."
+            + _did_you_mean((str(value["fact"]),), context.facts),
         )
     if not isinstance(held.value, Scalar):
         return ExpressionDefect(
