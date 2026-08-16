@@ -34,6 +34,7 @@ from app.agent_core.facts.postconditions import (
     Standing,
     Violation,
     check_alternatives_are_distinct,
+    check_eligibility_is_not_self_contradictory,
     check_no_edge_identifiers,
     check_periods_are_whole,
     check_no_group_identifiers,
@@ -73,6 +74,7 @@ def verify_answer(
     violations = check_no_group_identifiers(answer.text)
     violations += check_no_edge_identifiers(answer.text)
     violations += check_alternatives_are_distinct(answer.text, question)
+    violations += check_eligibility_is_not_self_contradictory(answer.text)
     violations += check_periods_are_whole(answer.text)
 
     collections = list(_plan_collections(answer, facts))

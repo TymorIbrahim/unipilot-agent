@@ -220,6 +220,63 @@ _FRACTIONAL_PERIOD = re.compile(
 )
 
 
+_MET_NONE = re.compile(
+    r"\bmet?(?:s|ting)?\s+0\b|\b0\s+of\s+(\d+)\s+prerequisite\s+groups?\b|\bmeet 0 of\b",
+    re.IGNORECASE,
+)
+_CLAIMS_ELIGIBLE = re.compile(
+    r"\b(?:you\s+are|are)\s+eligible\b|\beligible:\s*yes\b|\byou\s+(?:can|may)\s+take\b",
+    re.IGNORECASE,
+)
+_CLAIMS_INELIGIBLE = re.compile(
+    r"\bnot\s+eligible\b|\bineligible\b|\beligible:\s*no\b", re.IGNORECASE
+)
+
+
+def check_eligibility_is_not_self_contradictory(text: str) -> list[Violation]:
+    """An answer must not count zero met groups and then declare eligibility.
+
+    Live answer, shipped:
+
+        "No. You checked 1 prerequisite group and met 0, so you are eligible to
+         take 01040174."
+
+    Both halves are in one sentence and they are opposites. Worse than a plainly
+    wrong answer: a reader who skims the front takes "No" and a reader who skims
+    the end takes "eligible", and the run that produced it scored as CORRECT
+    because the checker read only the leading word.
+
+    Deliberately narrow, and narrowed AGAIN after a false positive. "You are
+    eligible for 00960211 but you meet 0 of 1 groups for 01040174" is an
+    ordinary answer about two courses, and the first version refused it: both
+    halves are present, they simply describe different courses.
+
+    So this fires only when the answer is about ONE course. Deciding which
+    clause belongs to which code needs a parser this does not have, and refusing
+    a correct multi-course answer is the worse error -- the run ends with
+    nothing rather than with something imperfect. A contradiction inside a
+    multi-course answer is not caught; that limit is real and is the price of
+    not blocking good answers.
+    """
+    body = text or ""
+    if len(set(_CODE.findall(body))) > 1:
+        return []
+    if not _MET_NONE.search(body):
+        return []
+    if _CLAIMS_INELIGIBLE.search(body):
+        return []  # "you met 0 ... so you are NOT eligible" is the coherent form
+    if not _CLAIMS_ELIGIBLE.search(body):
+        return []
+    return [
+        Violation(
+            "contradictory_eligibility",
+            "the answer says 0 prerequisite groups are met AND that the student is eligible. "
+            "Those are opposites. Meeting 0 of the required groups means NOT eligible -- say "
+            "that, and name the prerequisite that is missing.",
+        )
+    ]
+
+
 def check_periods_are_whole(text: str) -> list[Violation]:
     """You cannot take 0.42 of a semester.
 

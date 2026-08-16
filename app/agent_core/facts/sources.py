@@ -306,7 +306,58 @@ TRACK_COURSES = SourceSchema(
 # the point: registration used to depend on a graph engine that this repo does
 # not contain, so the `try` around it silently succeeded at registering nothing
 # and `traverse` was advertised with no reachable input.
+PASSED_COURSES = SourceSchema(
+    collection="passed_courses",
+    key="courseId",
+    fields={
+        "courseId": _I,
+        "userId": _I,
+        "courseNumber": _I,
+        "title": _T,
+        "grade": _Q,
+        "creditsEarned": _Q,
+        "creditsCounted": _Q,
+        "semesterCode": _I,
+        "attempt": _Q,
+    },
+    field_notes={
+        "courseNumber": (
+            "the course code, ALREADY joined from `courses`. Absent on a row whose catalog "
+            "entry is missing -- which is unrecoverable, not a bug to route around: a "
+            "comparison against it simply does not match, so eligibility comes back denied "
+            "rather than granted."
+        ),
+        "grade": "always 55 or above here; failing attempts are not in this view.",
+    },
+    basis=Basis.OFFICIAL_RECORD,
+    joins=(("courseNumber", "courses.courseNumber"), ("courseId", "courses._id")),
+)
+"""The transcript filtered to what COUNTS, with course numbers already joined.
+
+A view over `completed_courses`, and the answer to a defect that appeared three
+times in three consumers: credits (135 instead of 129.5), the term planner's
+prerequisite flag, and finally the agent's own eligibility reasoning, which told
+a student they met 1 of 1 prerequisite groups because they had ATTEMPTED the
+course that satisfies it and been graded 30.
+
+Every one of those was the same mistake -- reading a transcript row as a course
+the student HAS -- and the first two were fixed by filtering at the point of
+use. This is the third fix and the only structural one: a source that is already
+filtered cannot be misused that way. Same reasoning as `creditsCounted`, which
+exists so that "sum the credits" is right by default rather than right if you
+remember a rule.
+
+It also collapses a three-step dance the model performed on every eligibility
+question -- find the transcript, find the catalog rows for it, project distinct
+course numbers -- into one `find`.
+
+`completed_courses` stays registered and is still the right source for anything
+about ATTEMPTS: a failed course that must be re-taken, a grade history, how many
+times something was sat. This view cannot answer those, by construction.
+"""
+
 REGISTRY: dict[str, SourceSchema] = {
+    "passed_courses": PASSED_COURSES,
     "prerequisite_edges": PREREQUISITE_EDGES,
     "track_courses": TRACK_COURSES,
     "course_offerings": COURSE_OFFERINGS,
@@ -332,6 +383,7 @@ __all__ = [
     "COURSES",
     "DEGREE_PROGRAMS",
     "MOODLE_GRADES",
+    "PASSED_COURSES",
     "PREREQUISITE_EDGES",
     "REGISTRY",
     "SEMESTER_PLANS",

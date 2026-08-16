@@ -315,6 +315,44 @@ create table if not exists agent_conversations (
 );
 
 -- ---------------------------------------------------------------------------
+-- passed_courses -- the transcript, filtered to what actually counts.
+-- ---------------------------------------------------------------------------
+-- A view, not a table: it is `completed_courses` joined to `courses` and cut to
+-- passing grades, which is the join the model performed by hand on every
+-- question about prerequisites or eligibility.
+--
+-- It exists because doing it by hand went wrong in the dangerous direction. The
+-- model built "courses I have completed" from all 44 transcript rows without
+-- filtering `passed`, so a course FAILED with a 30 satisfied a prerequisite and
+-- the student was told they were eligible for something they cannot take. That
+-- is the credits defect a third time, in a third consumer. A source that is
+-- already filtered cannot be misused that way -- the same reason
+-- `creditsCounted` exists rather than a note asking for `creditsEarned` to be
+-- filtered.
+--
+-- LEFT JOIN, deliberately. 155 of 554 completed rows reference a `courseId` no
+-- `courses` row has, and for ONE demo student that is 10 of their 10 passed
+-- courses. An inner join returns zero rows for them, which reads as "you have
+-- passed nothing" -- confident and wrong. Keeping the row with a NULL
+-- `courseNumber` means `find` omits the field, a comparison against it does not
+-- match, and eligibility comes back DENIED rather than granted. Wrong in the
+-- safe direction, and visible.
+create or replace view passed_courses as
+select
+    cc."courseId",
+    cc."userId",
+    c."courseNumber",
+    c."title",
+    cc."grade",
+    cc."creditsEarned",
+    cc."creditsCounted",
+    cc."semesterCode",
+    cc."attempt"
+from completed_courses cc
+left join courses c on c."_id" = cc."courseId"
+where cc."passed";
+
+-- ---------------------------------------------------------------------------
 -- Row-level security.
 -- ---------------------------------------------------------------------------
 -- Enabled with NO policies, on purpose. The agent connects as `postgres` through
