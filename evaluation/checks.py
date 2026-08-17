@@ -50,8 +50,17 @@ _AFFIRMS = re.compile(
     # contradiction check started asking whether both fired at once, and then it
     # scored every correct denial as self-contradictory. The count is what makes
     # it an affirmation, so the count is in the pattern.
-    r"\byes\b|\byou are eligible\b|\byou can take\b"
+    # A verdict "yes" opens the answer or follows punctuation -- "Yes.",
+    # "Eligible: yes", "offered next spring: yes", "yes -- you meet 1 of 1".
+    # A BARE \byes\b also matched the hypothetical the prompt now explicitly
+    # asks for: "No -- you meet 0 of 1. To make it yes, pass 01040066." That is
+    # a correct DENIAL, and it scored as affirming and denying at once.
+    r"(?:^|[:.\-—–]\s*)yes\b"
+    r"|\byou are eligible\b|\byou can take\b"
     r"|\b(?:you\s+)?(?:have\s+)?(?:meet|meets|met)\s+[1-9]\d*\s+of\b"
+    # A projection affirms in the passive too: "next spring is forecast to
+    # offer it" states the same thing as "yes, it will run".
+    r"|\bforecast(?:ed)?\s+to\b|\bis\s+scheduled\s+to\b"
     # A projection affirms without ever saying "yes": "it has run every spring,
     # so it is expected again". Scoring that as a non-answer is the pessimistic
     # failure this file exists to prevent.

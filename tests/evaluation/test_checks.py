@@ -11,6 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "evaluation"))
 
 from checks import (  # noqa: E402
@@ -323,3 +325,60 @@ class TestAGiveUpIsNotAThinAnswer:
                 answer, must=("01040066", "01040166"), stance="deny"
             )
             assert verdict == "correct", f"{answer!r} -> {why}"
+
+
+class TestEveryRealAnswerFromTheEvalRuns:
+    """A corpus, not a rule. Each of these came out of a live run today, and
+    every scorer change gets checked against all of them.
+
+    Two were misread, and both cost a correct answer its mark:
+
+      "No -- you meet 0 of 1 prerequisite groups. To make it yes, pass any one
+       of 01040066, 01040166."
+
+    scored "affirms and denies in the same answer", because a bare \\byes\\b
+    matched inside "To make it yes" -- which is the phrasing the SYSTEM PROMPT
+    now explicitly asks for. A rule that generates prose the scorer punishes is
+    the worst kind of drift.
+
+      "The course 00940412 is in the catalog, and next spring is forecast to
+       offer it."
+
+    scored "never affirms". It affirms, in the passive.
+    """
+
+    AFFIRMATIONS = [
+        "Yes — 00940412 has been offered every spring on record.",
+        "yes.",
+        "Eligible: yes.",
+        "The course is offered next spring: yes.",
+        "For the course you asked about: yes.",
+        "yes — you meet 1 of 1 prerequisite groups.",
+        "Yes. 00960211 has 1 prerequisite group, and the requirement is any one of "
+        "00940224, 00940226.",
+        "The course 00940412 is in the catalog, and next spring is forecast to offer it.",
+        "00940412 is forecast to be offered next spring: yes.",
+    ]
+
+    DENIALS = [
+        "No — you meet 0 of 1 prerequisite groups. To make it yes, pass any one of "
+        "01040066, 01040166.",
+        "No. 01040174 requires any one of 01040066, 01040166, and you have passed neither.",
+        "You are not eligible. You need any one of 01040066, 01040166.",
+        "For 01040174, no — you meet 0 of 1 prerequisite groups.",
+        "No — 01040174 needs 01040066, 01040166; you have passed neither.",
+    ]
+
+    @pytest.mark.parametrize("answer", AFFIRMATIONS)
+    def test_an_affirmation_reads_as_one_and_only_one(self, answer: str) -> None:
+        assert claims_yes(answer), "affirmation not recognised"
+        assert not claims_no(answer), "affirmation also read as a denial"
+
+    @pytest.mark.parametrize("answer", DENIALS)
+    def test_a_denial_reads_as_one_and_only_one(self, answer: str) -> None:
+        assert claims_no(answer), "denial not recognised"
+        assert not claims_yes(answer), "denial also read as an affirmation"
+
+    def test_the_hypothetical_yes_does_not_affirm(self) -> None:
+        """Isolated, because the prompt asks for exactly this shape."""
+        assert not claims_yes("To make it yes, pass any one of 01040066, 01040166.")

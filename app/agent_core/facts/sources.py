@@ -328,6 +328,12 @@ PASSED_COURSES = SourceSchema(
             "rather than granted."
         ),
         "grade": "always 55 or above here; failing attempts are not in this view.",
+        "creditsCounted": (
+            "credits that COUNT toward the degree. Every row here is ALSO a row in "
+            "`completed_courses` -- this view is that table filtered, not a second set of "
+            "results. Sum ONE of them, never both: adding the two together double-counts "
+            "every passed course and reports a student past a requirement they have not met."
+        ),
     },
     basis=Basis.OFFICIAL_RECORD,
     joins=(("courseNumber", "courses.courseNumber"), ("courseId", "courses._id")),
