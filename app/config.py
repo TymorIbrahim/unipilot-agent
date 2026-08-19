@@ -20,6 +20,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # well before it and ship whatever the agent has grounded so far, because a
 # partial honest answer scores and a timeout does not.
 VERCEL_HARD_LIMIT_S = 300.0
+"""The documented ceiling for a Vercel serverless call, and what `vercel.json`
+asks for with `maxDuration: 300`.
+
+MEASURED, 2026-08-19: production does not get it. Requests are cut at a hard 60s
+with no HTTP response at all -- 60.80s, 60.84s, 60.88s on three consecutive
+attempts, while a 60.4s request returned 200. `maxDuration` above 60 needs a
+paid plan; on Hobby it is silently capped.
+
+This is not academic. A cut request returns NOTHING -- not an error body, not the
+four fields `/api/execute` promises on both paths -- so every guarantee this
+codebase makes about graceful degradation depends on finishing first. Earlier the
+same endpoint served 116s and 193s requests, so the limit changed under us rather
+than always having been there."""
 DEFAULT_TIME_BUDGET_S = 270.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
 
