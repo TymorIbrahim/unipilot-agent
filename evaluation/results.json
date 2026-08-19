@@ -1,164 +1,29 @@
 [
   {
-    "id": "credits_completed",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You have completed 129.5 credits so far.",
-    "steps": 2,
-    "elapsed_s": 11.3
-  },
-  {
-    "id": "credits_completed",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You have completed 129.5 credits so far.",
-    "steps": 2,
-    "elapsed_s": 4.7
-  },
-  {
-    "id": "credits_completed",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You have completed 129.5 credits so far.",
-    "steps": 4,
-    "elapsed_s": 8.0
-  },
-  {
-    "id": "credits_required_and_remaining",
-    "run": 0,
-    "verdict": "incomplete",
-    "why": "right answer, but never states 25.5",
-    "answer": "Your degree requires 155 credits total. Based on your 253.5 completed credits, the computed remainder is -98.5, so you are already past the requirement.",
-    "steps": 2,
-    "elapsed_s": 14.1
-  },
-  {
-    "id": "credits_required_and_remaining",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits, and you still need 25.5.",
-    "steps": 2,
-    "elapsed_s": 9.6
-  },
-  {
-    "id": "credits_required_and_remaining",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits, and you still need 25.5.",
-    "steps": 5,
-    "elapsed_s": 25.4
-  },
-  {
-    "id": "english_requirement",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You must satisfy 2 English-language courses to graduate.",
-    "steps": 4,
-    "elapsed_s": 14.7
-  },
-  {
-    "id": "english_requirement",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You have to satisfy 2 English-language courses to graduate.",
-    "steps": 4,
-    "elapsed_s": 13.0
-  },
-  {
-    "id": "english_requirement",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You need 2 to satisfy the English-language graduation requirement.",
-    "steps": 4,
-    "elapsed_s": 15.2
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You are eligible. You meet 1 of 1 prerequisite groups. 00960211 requires any one of 00940224, 00940226.",
-    "steps": 5,
-    "elapsed_s": 39.2
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "00960211 exists in the catalog, and you are eligible to take it. You meet 1 of 1 prerequisite groups.\n\nIt requires 1 prerequisite group: any one of 00940224, 00940226.",
-    "steps": 4,
-    "elapsed_s": 32.9
-  },
-  {
-    "id": "eligibility_00960211",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "00960211 is in the catalog, you have not passed it yet, and yes. It has 1 prerequisite group: any course from 00940224, 00940226.",
-    "steps": 6,
-    "elapsed_s": 44.0
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "No — 0 of 1 prerequisite groups are met. To become eligible, you need any one of 01040066, 01040166.",
-    "steps": 4,
-    "elapsed_s": 29.3
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 1,
-    "verdict": "wrong",
-    "why": "affirms and denies in the same answer",
-    "answer": "No — you meet 0 of 1 prerequisite groups. To make it yes, pass any one of 01040066, 01040166.",
-    "steps": 4,
-    "elapsed_s": 18.0
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "no. 01040174 needs any one of 01040066, 01040166, and you have passed neither.",
-    "steps": 4,
-    "elapsed_s": 41.4
-  },
-  {
-    "id": "forecast_00940412_spring",
+    "id": "semesters_to_graduate",
     "run": 0,
     "verdict": "wrong",
-    "why": "never affirms, and the data says yes",
-    "answer": "The course 00940412 is in the catalog, and next spring is forecast to offer it.",
-    "steps": 3,
-    "elapsed_s": 19.9
+    "why": "declined to answer a question the data supports",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 13,
+    "elapsed_s": 255.0
   },
   {
-    "id": "forecast_00940412_spring",
+    "id": "semesters_to_graduate",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Yes.",
-    "steps": 3,
-    "elapsed_s": 13.8
+    "answer": "It will take you 2 semesters to graduate.\n\nPlan by term:\n- term winter · courses 6 · credits_total 16\n- term spring · courses 3 · credits_total 8.5\n\nWinter courses:\n- number 00940704 · name סדנת תכנות בשפת סי · type mandatory · credits 1.5\n- number 00960578 · name בחירה חברתית והחלטות משותפות · type elective · credits 2.5\n- number 00960606 · name כלכלה התנהגותית בסביבה טכנולוגית · type elective · credits 3\n- number 00960620 · name Introduction to Human Factors Engineering · type elective · credits 3.5\n- number 00970317 · name תורת המשחקים השיתופיים · type elective · credits 2.5\n- number 00970325 · name תיאוריה ושיטות באופטימיזציה דלילה · type elective · credits 3\n\nSpring courses:\n- number 00970800 · name עקרונות השיווק · type mandatory · credits 3.5\n- number 00960212 · name מודלים גרפים הסתברותיים · type elective · credits 2\n- number 00970414 · name סטטיסטיקה 2 · type elective · credits 3",
+    "steps": 13,
+    "elapsed_s": 202.1
   },
   {
-    "id": "forecast_00940412_spring",
+    "id": "semesters_to_graduate",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "That course will be offered next spring: yes.",
-    "steps": 3,
-    "elapsed_s": 16.9
+    "answer": "You need 2 semesters.\n\n- term winter · courses 5 · credits_total 14.5\n- term spring · courses 3 · credits_total 8.5\n\nYour full course plan is 00960578, 00960606, 00960620, 00970317, 00970325, 00960212, 00960600, 00970414.",
+    "steps": 10,
+    "elapsed_s": 184.2
   }
 ]

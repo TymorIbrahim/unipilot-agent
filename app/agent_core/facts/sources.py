@@ -58,7 +58,10 @@ COMPLETED_COURSES = SourceSchema(
         "creditsCounted": (
             "credits that COUNT toward the degree -- `creditsEarned` when the course was "
             "passed, else 0. SUM THIS for 'how many credits have I completed'. Summing "
-            "`creditsEarned` instead counts courses the student FAILED and overstates the total."
+            "`creditsEarned` instead counts courses the student FAILED and overstates the total. "
+            "WEIGHT A GPA BY THIS TOO: gpa = sum(grade * creditsCounted) / sum(creditsCounted). "
+            "Weighting by `creditsEarned` drags a failed grade into the average -- it reported "
+            "72.64 where the real figure is 74.45."
         ),
         # Imperative, like `creditsCounted` above, and for the same measured
         # reason. This note used to say only what the column MEANS, and the

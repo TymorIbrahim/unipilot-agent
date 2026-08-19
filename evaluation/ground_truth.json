@@ -26,8 +26,12 @@
       "prompt": "How many credits have I completed so far?",
       "expected": 129.5,
       "unit": "credits",
-      "must_contain": ["129.5"],
-      "must_not_contain": ["135"],
+      "must_contain": [
+        "129.5"
+      ],
+      "must_not_contain": [
+        "135"
+      ],
       "derivation": "Sum of creditsEarned over the student's 44 transcript rows, EXCLUDING courses failed under the 55 rule. Raw sum = 135.0; course 01040166 (אלגברה אמ') was graded 30 -- a fail -- and carries 5.5 credits. 135.0 - 5.5 = 129.5. There are no retakes: 44 rows, 44 distinct courseIds.",
       "contested": true,
       "contested_note": "The data is internally inconsistent for exactly one row. creditsEarned IS a genuine earned-credit field -- course 03240053 (עברית 3) has catalog credits 3.0 but creditsEarned 0.0 because it was failed -- yet 01040166 was failed with grade 30 and still carries its full 5.5. Trusting the field alone yields 135.0; trusting the regulation yields 129.5. 129.5 is taken as correct because a student cannot count a failed course toward graduation, and regulation 3.1.3(d) requires a failed mandatory course to be re-taken. The BEST answer states 129.5 and mentions that 01040166 was failed and must be repeated.",
@@ -36,10 +40,18 @@
     {
       "id": "credits_required_and_remaining",
       "prompt": "What is the total credit requirement for my degree, and how many do I still need?",
-      "expected": {"total_required": 155.0, "remaining": 25.5},
+      "expected": {
+        "total_required": 155.0,
+        "remaining": 25.5
+      },
       "unit": "credits",
-      "must_contain": ["155", "25.5"],
-      "must_not_contain": ["20"],
+      "must_contain": [
+        "155",
+        "25.5"
+      ],
+      "must_not_contain": [
+        "20"
+      ],
       "derivation": "degree_programs.totalCredits = 155.0 for degreeId 6a477d511f64e5fd20129b44 (joined from student_profiles.degreeId). Remaining = 155.0 - 129.5 = 25.5.",
       "contested": true,
       "contested_note": "Inherits the credits_completed dispute. If 135.0 is accepted as completed, remaining is 20.0. The 155.0 total is not in dispute.",
@@ -48,10 +60,19 @@
     {
       "id": "english_requirement",
       "prompt": "What is the English language requirement I have to satisfy to graduate?",
-      "expected": {"courses_required": 2, "deadline_semesters": 4},
+      "expected": {
+        "courses_required": 2,
+        "deadline_semesters": 4
+      },
       "unit": "English-language courses",
-      "must_contain": ["2"],
-      "must_not_contain": ["graduate students", "credit points", "level 2"],
+      "must_contain": [
+        "2"
+      ],
+      "must_not_contain": [
+        "graduate students",
+        "credit points",
+        "level 2"
+      ],
       "derivation": "concepts/regulations-undergraduate.md § 'English Language (תקנה 1.3.3)': 'From academic year 2021/2022: every student must complete at least 2 English-language courses (training or content courses)'; 'Language training courses must be completed within 4 semesters'; 'Cannot graduate without completing 2 English courses'. Corroborated by the Hebrew section דרישות שפה in the same file.",
       "contested": false,
       "trap": "The passage states FOUR different numbers -- English Advanced B is 3 credits, exemption awards 3 credits, 2 courses are required, and training must finish within 4 semesters. An answer of bare '2' is ambiguous; '2 credit points' and 'level 2' are wrong units. Separately, concepts/regulations-graduate.md has its own English section, and this student is an UNDERGRADUATE -- any answer mentioning graduate students has read the wrong document.",
@@ -60,9 +81,24 @@
     {
       "id": "eligibility_00960211",
       "prompt": "Am I eligible to take 00960211, and what does it require?",
-      "expected": {"eligible": true, "groups_total": 1, "groups_met": 1, "requires_any_of": ["00940224", "00940226"], "satisfied_via": "00940224"},
-      "must_contain": ["00940224", "00940226"],
-      "must_not_contain": ["not eligible", "2 prerequisites"],
+      "expected": {
+        "eligible": true,
+        "groups_total": 1,
+        "groups_met": 1,
+        "requires_any_of": [
+          "00940224",
+          "00940226"
+        ],
+        "satisfied_via": "00940224"
+      },
+      "must_contain": [
+        "00940224",
+        "00940226"
+      ],
+      "must_not_contain": [
+        "not eligible",
+        "2 prerequisites"
+      ],
       "derivation": "prerequisite_edges where course = 00960211 returns 2 rows, both in group '00960211' -- so ONE group, satisfied by ANY ONE of its members. The student's transcript contains 00940224 (מבני נתונים ואלגוריתמים) with grade 76, a genuine pass. Target course 00960211 (מודלים למסחר אלקטרוני, 3.5 credits) is not already on the transcript.",
       "contested": false,
       "trap": "The two edges share a group, so they are ALTERNATIVES, not two separate obligations. Counting rows instead of distinct groups reports 2 requirements and can conclude the student is ineligible.",
@@ -71,8 +107,20 @@
     {
       "id": "eligibility_01040174",
       "prompt": "Am I eligible to take 01040174?",
-      "expected": {"eligible": false, "groups_total": 1, "groups_met": 0, "requires_any_of": ["01040066", "01040166"], "blocked_because": "01040166 was failed with a 30; 01040066 was never taken"},
-      "must_contain": ["01040066", "01040166"],
+      "expected": {
+        "eligible": false,
+        "groups_total": 1,
+        "groups_met": 0,
+        "requires_any_of": [
+          "01040066",
+          "01040166"
+        ],
+        "blocked_because": "01040166 was failed with a 30; 01040066 was never taken"
+      },
+      "must_contain": [
+        "01040066",
+        "01040166"
+      ],
       "must_not_contain": [],
       "stance": "deny",
       "derivation": "prerequisite_edges where course = 01040174 returns 2 rows, both in group '01040174' -- ONE group, satisfied by ANY ONE of its members. The student has no transcript row for 01040066 at all, and their row for 01040166 (אלגברה אמ') carries grade 30, below the 55 pass mark. So 0 of 1 groups are met and the student is NOT eligible.",
@@ -83,9 +131,17 @@
     {
       "id": "forecast_00940412_spring",
       "prompt": "Will 00940412 be offered next spring?",
-      "expected": {"offered": true, "spring_years": 3, "years_observed": 3, "cycle_rate": 1.0, "naive_rate": 0.43},
+      "expected": {
+        "offered": true,
+        "spring_years": 3,
+        "years_observed": 3,
+        "cycle_rate": 1.0,
+        "naive_rate": 0.43
+      },
       "must_contain": [],
-      "must_not_contain": ["0.43"],
+      "must_not_contain": [
+        "0.43"
+      ],
       "stance": "affirm",
       "derivation": "course_offerings for 00940412 (הסתברות מ) holds 7 rows spanning academic years 2023, 2024 and 2025, all status 'published': spring in 2023, 2024 and 2025; winter in 2024 and 2025; summer in 2024 and 2025. Spring occurred in 3 of the 3 years observed, so the recurrence rate is 3/3 = 1.00 and the course should be projected to run again. 7 observations clears forecast.MIN_OBSERVATIONS = 3.",
       "contested": false,
@@ -93,6 +149,65 @@
       "note_on_scoring": "A run that answers 'I could not determine this' is scored wrong, not excused. The whole history is fetchable in one call -- 7 rows -- so an incomplete-history refusal means the run failed to fetch what was there. `must_contain` is deliberately EMPTY: the prompt names the course, so a bare 'yes' is an unambiguous and correct answer, and the stance carries the whole correctness test. Requiring the code here was tried and inverted the ranking -- on the 3-repeat run of 2026-08-15 it failed 'yes -- it will be offered next spring' and passed 'Yes, 00940412 has 3 offerings next spring', which is the ONLY wrong answer of the three: there are no recorded 2026 offerings, and the 3 is the number of PAST springs restated as a fact about the future.",
       "what_this_cannot_catch": "That fabrication. An answer saying '3 offerings next spring' and an answer saying 'it ran in all 3 years on record' both state 3, both affirm, and no must/must_not rule separates them. The limit is recorded rather than papered over: a run that invents a future count passes this question, and only a human reading the answer will see it.",
       "ideal_answer": "Yes, almost certainly. 00940412 (הסתברות מ) has been offered in spring in every one of the three academic years on record (2023, 2024, 2025), so it should run again next spring. It also runs in winter and summer, so spring is not your only opportunity."
+    },
+    {
+      "id": "gpa_target_impossible",
+      "prompt": "What minimum grades do I need in my remaining courses to graduate with a GPA of 85?",
+      "expected": {
+        "achievable": false,
+        "current_gpa": 74.45,
+        "max_possible_gpa": 78.65,
+        "required_average_if_it_were_possible": 138.57
+      },
+      "must_contain": [],
+      "must_not_contain": [
+        "138.57",
+        "160.89",
+        "138.6"
+      ],
+      "stance": "deny",
+      "derivation": "GPA is credit-weighted over PASSED, credit-bearing courses: sum(grade * creditsCounted) / sum(creditsCounted) = 9641.5 / 129.5 = 74.4517 -> 74.45. Reaching 85 across the remaining 25.5 credits needs an average g solving 85*(129.5+25.5) = 9641.5 + 25.5g, i.e. g = 138.57 -- above the maximum grade of 100, so it cannot be done. The ceiling: scoring 100 in every remaining credit gives (9641.5 + 2550)/155 = 78.65.",
+      "contested": false,
+      "trap": "This is the ONLY advertised capability with no prior coverage -- agent_info claims the agent can 'work out what-if scenarios such as the minimum grades needed to reach a target GPA'. The arithmetic is easy and the answer is IMPOSSIBLE, so the failure mode is a confident 138.57, or a bare '85 in each course' that never checks the sum. A grade above 100 should also be refused by `check_grades_in_range` before it reaches the reader; if the number ships, that post-condition did not fire.",
+      "ideal_answer": "You cannot reach 85. Your GPA is 74.45 over 129.5 credits, and even scoring 100 in all 25.5 remaining credits you would finish at 78.65. Reaching 85 would need an average of 138.57, which is above the maximum grade."
+    },
+    {
+      "id": "prerequisite_chain_00970135",
+      "prompt": "What do I need to do before I can take 00970135?",
+      "expected": {
+        "blocked_by": "00960324",
+        "chain_depth": 2,
+        "next_action": "take 00960324, which you are already eligible for",
+        "why_eligible": "00960324 needs any one of 00940314 or 00980413; 00940314 is passed"
+      },
+      "must_contain": [
+        "00960324"
+      ],
+      "must_not_contain": [],
+      "derivation": "prerequisite_edges: 00970135 has ONE group with ONE member, 00960324, which the student has not passed -- so 00970135 is blocked. 00960324 in turn has one group, any one of 00940314 or 00980413, and the student HAS passed 00940314. So the chain is exactly two deep and the actionable answer is: take 00960324 next, then 00970135 opens.",
+      "contested": false,
+      "trap": "Every eligibility question tested so far is ONE hop -- is this course's group satisfied, yes or no. This needs the answer to the second hop too, or it stops at 'you need 00960324' without saying that course is already available. `traverse` exists for exactly this and has appeared in ZERO live runs; the model has always reached for a one-hop `find` on the edges.",
+      "ideal_answer": "You need 00960324 first -- it is 00970135's only prerequisite and you have not passed it. You are already eligible for 00960324, since it needs either 00940314 or 00980413 and you passed 00940314. So take 00960324, and 00970135 opens up after it."
+    },
+    {
+      "id": "semesters_to_graduate",
+      "prompt": "How many semesters will it take me to graduate, and what should I take each semester?",
+      "expected": {
+        "minimum_semesters": 2,
+        "remaining_credits": 25.5,
+        "cap_per_semester": 18.0
+      },
+      "must_contain": [
+        "2"
+      ],
+      "must_not_contain": [
+        "1.42",
+        "1.4"
+      ],
+      "derivation": "155 required - 129.5 completed = 25.5 remaining. student_profiles.maxCreditsPerSemester = 18.0. ceil(25.5 / 18.0) = 2, so TWO semesters is the floor. It is a floor and not a promise: a live winter plan placed only 16 of the 18 credits once offerings, exam dates and timetable conflicts were applied, so the true answer may be more than 2 and must never be fewer.",
+      "contested": false,
+      "trap": "`optimize` is the tool for placing courses across several slots and has appeared in ZERO live runs. Two failure modes: a fractional answer (1.42 semesters -- a term cannot be part-taken, and `check_periods_are_whole` should refuse it), and a single-semester answer that ignores the 18-credit cap.",
+      "ideal_answer": "At least 2 semesters: you need 25.5 more credits and your cap is 18 per semester. Splitting them, a first term of up to 18 credits and a second of the remainder -- though what is actually offered each term may stretch it further."
     }
   ]
 }
