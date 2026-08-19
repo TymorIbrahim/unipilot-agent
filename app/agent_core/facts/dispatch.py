@@ -737,12 +737,35 @@ async def _plan_term(name: str, args: Mapping[str, Any], context: DispatchContex
             name,
             ExpressionDefect(0, "no 'me' fact holds the student id, which plan_term needs to reach the plan service"),
         )
-    if context.settings is None:
-        return _defect(name, DataDefect(0, "the plan service is not configured for this run, so plan_term cannot run"))
-
+    # Arguments BEFORE configuration. A malformed call is malformed whether or
+    # not the plan service is reachable, and reporting "not configured" for it
+    # sends the model to fix the wrong thing -- it also made two tests of this
+    # very check pass for that reason rather than for the shape they asserted.
     terms = _string_list(args.get("terms"))
     if not terms:
         return _defect(name, ExpressionDefect(0, '\'terms\' must be a non-empty list of term names, e.g. ["winter"] or ["winter", "spring"]'))
+    repeated = sorted({t for t in terms if terms.count(t) > 1})
+    if repeated:
+        # A placed course is tagged with the term NAME, which is the whole
+        # contract for splitting the plan afterwards. Ask for the same name
+        # twice and two separate terms come back indistinguishable: a live
+        # "how many semesters" run asked for ["winter","spring","summer",
+        # "winter","spring","summer"], then selected term == "winter" and
+        # merged both winters into one 23-credit term against an 18 cap. The
+        # planner had capped each term correctly; the labels destroyed it.
+        return _defect(
+            name,
+            ExpressionDefect(
+                0,
+                f"'terms' repeats {', '.join(repr(t) for t in repeated)}. Each placed course is "
+                "tagged with the term NAME, so two terms sharing one name come back "
+                "indistinguishable and any split on that name silently merges them. Use distinct "
+                'names -- year-coded ones work: ["2026-1", "2026-2"].',
+            ),
+        )
+    if context.settings is None:
+        return _defect(name, DataDefect(0, "the plan service is not configured for this run, so plan_term cannot run"))
+
     candidates = _plan_candidates(args.get("candidates"), context)
     if isinstance(candidates, ExpressionDefect):
         return _defect(name, candidates)
