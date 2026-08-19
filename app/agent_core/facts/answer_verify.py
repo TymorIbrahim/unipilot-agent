@@ -16,10 +16,15 @@ records carry `credits` and `min_grade` as real numbers, and the standing comes
 from the scalar facts the min-grade formula itself consumes (`total_points`,
 `total_credits`). Reading the facts, not the rendered text, keeps the check exact.
 
-A verdict is a list of `Violation`s -- empty when the answer is sound OR when it
-is simply not a min-grade plan (a normal answer has no such collection, so this
-is a no-op for it). A non-empty verdict is handed back to the loop as a loud,
-specific reason to try again, in the same voice a rejected answer already is.
+A verdict is a list of `Violation`s -- empty when the answer is sound, or when it
+holds nothing these checks judge. It is NOT limited to min-grade plans: that was
+the original scope and it left an ordinary term plan entirely unexamined, which
+is how "Winter -- 23 credits" shipped against an 18-credit cap. Any answer
+slotting a collection whose records carry `credits` is now load-checked, with
+the grade checks skipping rows that claim no minimum.
+
+A non-empty verdict is handed back to the loop as a loud, specific reason to try
+again, in the same voice a rejected answer already is.
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from app.agent_core.facts.postconditions import (
     check_grades_in_range,
     check_joint_floor,
     check_term_load,
+    check_term_within_cap,
 )
 from app.agent_core.facts.types import Collection, Scalar
 
@@ -58,6 +64,13 @@ _CODE_FIELDS = ("number", "courseNumber", "code")
 _POINTS_FACTS = ("total_points", "completed_points", "quality_points", "earned_points", "points")
 _CREDITS_FACTS = ("total_credits", "completed_credits", "earned_credits", "credits")
 _GPA_FACTS = ("gpa", "current_gpa")
+_CAP_FACTS = ("max_credits_per_semester", "max_credits", "credit_cap", "maxCreditsPerSemester")
+"""Where the student's per-semester limit is found.
+
+`max_credits_per_semester` is seeded from the profile at the start of every run,
+so the first name always resolves; the rest cover a run that recomputed it under
+its own name, the same way `_POINTS_FACTS` does."""
+
 _GPA_TOLERANCE = 0.5
 _FLOOR = re.compile(r"above\s+(\d+(?:\.\d+)?)")
 
@@ -84,10 +97,16 @@ def verify_answer(
 
     violations += list(check_grades_in_range(courses))
 
-    # Each :detail collection is one rendered term; flag any whose load is really
-    # the "(unscheduled)" overflow swept in.
+    # Each :detail collection is one rendered term. Two checks, and they are not
+    # the same one twice: `check_term_load` is a 40-credit sanity ceiling for the
+    # `optimize` overflow, and the cap is this student's real limit, which a
+    # 23-credit term cleared without either noticing.
+    cap = _credit_cap(facts)
     for name, term_courses in collections:
-        violations += check_term_load(sum(course.credits for course in term_courses), name)
+        term_credits = sum(course.credits for course in term_courses)
+        violations += check_term_load(term_credits, name)
+        if cap is not None:
+            violations += check_term_within_cap(term_credits, cap, name)
 
     standing = _standing(facts)
     if standing is not None:
@@ -104,9 +123,16 @@ def _plan_collections(
     """(fact name, its planned courses) for each `:detail` collection the answer
     used -- one entry per rendered term.
 
-    A course is a record carrying BOTH a numeric `credits` and `min_grade` -- the
-    signature of a min-grade plan row, and what separates it from any other
-    collection the answer might slot (offerings, a prereq list)."""
+    A course is a record carrying a numeric `credits`. `min_grade` is OPTIONAL,
+    and requiring it was a real gap: every check below was gated behind a field
+    only the min-grade planner produces, so an ORDINARY term plan -- courseNumber,
+    title, category, credits -- returned nothing here and shipped completely
+    unverified. A live answer to "how many semesters will it take me to graduate"
+    put 23 credits in one winter term, against a cap of 18, and nothing looked.
+
+    Rows without `min_grade` get `min_grade=None`. The joint-floor and
+    grade-range checks skip them, because they genuinely have nothing to judge;
+    the LOAD checks do not, because credits are all they ever needed."""
     collections: list[tuple[str, list[GradedCourse]]] = []
     for name in answer.used:
         held = facts.get(name)
@@ -115,13 +141,23 @@ def _plan_collections(
         courses: list[GradedCourse] = []
         for record in held.value.records:
             credits = _number(record.fields.get(_CREDITS_FIELD))
-            grade = _number(record.fields.get(_GRADE_FIELD))
-            if credits is None or grade is None:
+            if credits is None:
                 continue
-            courses.append(GradedCourse(code=_code(record), credits=credits, min_grade=grade))
+            courses.append(
+                GradedCourse(
+                    code=_code(record),
+                    credits=credits,
+                    min_grade=_number(record.fields.get(_GRADE_FIELD)),
+                )
+            )
         if courses:
             collections.append((name, courses))
     return collections
+
+
+def _credit_cap(facts: Mapping[str, HeldFact]) -> float | None:
+    value = _scalar_fact(facts, _CAP_FACTS)
+    return value if value and value > 0 else None
 
 
 def _standing(facts: Mapping[str, HeldFact]) -> Standing | None:

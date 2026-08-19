@@ -62,11 +62,19 @@ class Standing:
 
 @dataclass(frozen=True)
 class GradedCourse:
-    """A planned course and the minimum grade the answer claims holds the floor."""
+    """A planned course, and the minimum grade the answer claims holds the floor.
+
+    `min_grade` is None on an ORDINARY plan row -- a term plan carries a course,
+    its credits and its category, and no minimum at all. It used to be required,
+    which meant every check here was reachable only from the min-grade planner
+    and an ordinary plan was never verified: a live "how many semesters" answer
+    put 23 credits in one term against an 18 cap, unexamined. The load checks
+    need only `credits`; the grade checks skip a row with nothing to judge.
+    """
 
     code: str
     credits: float
-    min_grade: float
+    min_grade: float | None = None
 
 
 @dataclass(frozen=True)
@@ -343,6 +351,8 @@ def check_grades_in_range(courses: Sequence[GradedCourse]) -> list[Violation]:
     """
     out: list[Violation] = []
     for course in courses:
+        if course.min_grade is None:
+            continue  # an ordinary plan row claims no minimum, so none can be wrong
         if course.min_grade < MIN_GRADE:
             out.append(
                 Violation(
@@ -379,6 +389,43 @@ def check_term_load(term_credits: float, term_label: str = "a term") -> list[Vio
             )
         ]
     return []
+
+
+def check_term_within_cap(
+    term_credits: float, cap: float, term_label: str = "a term"
+) -> list[Violation]:
+    """A planned term must not exceed the student's OWN per-semester limit.
+
+    Distinct from `check_term_load`, which is a sanity ceiling at 40 credits --
+    "a number no real semester reaches", written to catch an 83-credit term made
+    of `optimize` overflow. It is a range check by design, and 23 credits sails
+    through it.
+
+    This is the POLICY check, and it had no equivalent until now: nothing
+    compared a plan to `student_profiles.maxCreditsPerSemester`. A live answer
+    to "how many semesters will it take me to graduate" reported "Winter -- 23
+    credits" against a cap of 18, and no guard looked, because the value was not
+    a fact the answer layer could reach. It is one now -- the profile is seeded
+    at the start of every run -- so the check is finally possible.
+
+    The usual cause is not an over-full term but two terms collapsed into one:
+    `plan_term` tags placed courses with the term NAME, so asking for
+    ["winter", "spring", "winter"] returns two winters that a later
+    `select term == "winter"` merges. The message says so, because a model told
+    only "too many credits" drops a course instead of splitting the term.
+    """
+    if cap <= 0 or term_credits <= cap + _FLOOR_EPSILON:
+        return []
+    return [
+        Violation(
+            "term_over_cap",
+            f"{term_label} totals {term_credits:g} credits, over this student's limit of "
+            f"{cap:g} per semester. If you asked `plan_term` for the same term name twice, "
+            "the two came back under one label and a `select` on it merged them -- give each "
+            "term a distinct name, and pass `max_credits` so the planner enforces the cap "
+            "rather than leaving it to be noticed here.",
+        )
+    ]
 
 
 def check_joint_floor(
