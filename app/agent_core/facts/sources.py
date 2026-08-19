@@ -199,6 +199,15 @@ DEGREE_PROGRAMS = SourceSchema(
     collection="degree_programs",
     key="_id",
     fields={"_id": _I, "name": _T, "totalCredits": _Q},
+    field_notes={
+        "totalCredits": (
+            "the credits the DEGREE requires. Credits still needed = totalCredits - "
+            "sum(completed_courses.creditsCounted), and that subtraction is the ONLY way to get "
+            "it. Summing the credits of the courses left in `track_courses` answers a different "
+            "question -- a track lists more courses than the degree requires, because its "
+            "electives are choices -- and gives 50.0 where the student needs 25.5."
+        ),
+    },
     basis=Basis.OFFICIAL_RECORD,
     object_id_fields=frozenset({"_id"}),
 )
@@ -293,6 +302,14 @@ TRACK_COURSES = SourceSchema(
         "edge": _I,
         "track": _I,
         "course": _I,
+    },
+    field_notes={
+        "course": (
+            "a course number this track LISTS -- candidates to choose among, not a set the "
+            "student must complete in full. Their credits do NOT total the degree: use them to "
+            "pick what to take, and `degree_programs.totalCredits` minus completed credits to say "
+            "how much is LEFT."
+        ),
     },
     basis=Basis.WIKI_DERIVED,
     # `course` is a course NUMBER; join to the catalog for credits and faculty.

@@ -379,6 +379,21 @@ class TestEveryRealAnswerFromTheEvalRuns:
         assert claims_no(answer), "denial not recognised"
         assert not claims_yes(answer), "denial also read as an affirmation"
 
+    IMPOSSIBILITIES = [
+        "Because that minimum is above the maximum possible grade, the target is not reachable.",
+        "Since 138.57 is above the maximum possible grade, the GPA target is not reachable.",
+        "you would need at least 112.32 in every remaining course, which is not achievable.",
+        "That target cannot be met with the remaining credits.",
+        "Reaching 85 is impossible from here.",
+    ]
+
+    @pytest.mark.parametrize("answer", IMPOSSIBILITIES)
+    def test_an_unreachable_target_reads_as_a_denial(self, answer: str) -> None:
+        """The GPA question scored 0/3 "never states the negative" on three
+        answers that all said so -- in words no pattern here covered."""
+        assert claims_no(answer), "an impossibility is a denial"
+        assert not claims_yes(answer)
+
     def test_the_hypothetical_yes_does_not_affirm(self) -> None:
         """Isolated, because the prompt asks for exactly this shape."""
         assert not claims_yes("To make it yes, pass any one of 01040066, 01040166.")

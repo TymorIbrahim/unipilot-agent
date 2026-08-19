@@ -159,17 +159,18 @@
         "max_possible_gpa": 78.65,
         "required_average_if_it_were_possible": 138.57
       },
-      "must_contain": [],
+      "must_contain": [
+        "74.45"
+      ],
       "must_not_contain": [
-        "138.57",
-        "160.89",
-        "138.6"
+        "72.64"
       ],
       "stance": "deny",
       "derivation": "GPA is credit-weighted over PASSED, credit-bearing courses: sum(grade * creditsCounted) / sum(creditsCounted) = 9641.5 / 129.5 = 74.4517 -> 74.45. Reaching 85 across the remaining 25.5 credits needs an average g solving 85*(129.5+25.5) = 9641.5 + 25.5g, i.e. g = 138.57 -- above the maximum grade of 100, so it cannot be done. The ceiling: scoring 100 in every remaining credit gives (9641.5 + 2550)/155 = 78.65.",
       "contested": false,
       "trap": "This is the ONLY advertised capability with no prior coverage -- agent_info claims the agent can 'work out what-if scenarios such as the minimum grades needed to reach a target GPA'. The arithmetic is easy and the answer is IMPOSSIBLE, so the failure mode is a confident 138.57, or a bare '85 in each course' that never checks the sum. A grade above 100 should also be refused by `check_grades_in_range` before it reaches the reader; if the number ships, that post-condition did not fire.",
-      "ideal_answer": "You cannot reach 85. Your GPA is 74.45 over 129.5 credits, and even scoring 100 in all 25.5 remaining credits you would finish at 78.65. Reaching 85 would need an average of 138.57, which is above the maximum grade."
+      "ideal_answer": "You cannot reach 85. Your GPA is 74.45 over 129.5 credits, and even scoring 100 in all 25.5 remaining credits you would finish at 78.65. Reaching 85 would need an average of 138.57, which is above the maximum grade.",
+      "note_on_scoring": "must_contain is the CURRENT GPA, 74.45, and must_not_contain is 72.64 -- the value produced by weighting with `creditsEarned`, which drags the failed 01040166 into the average. That is the real trap and it fired: the agent reported 72.64 until the `creditsCounted` note was made imperative about GPA. 138.57 was briefly listed as forbidden, which was wrong -- it is the CORRECT required average, and stating it beside the fact that it is unreachable is exactly the ideal answer."
     },
     {
       "id": "prerequisite_chain_00970135",

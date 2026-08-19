@@ -97,6 +97,15 @@ _NEGATIVE_CLAIMS = (
     # around it, which "no" does not.
     r"\bmeet(s|ing)? 0 of\b",
     r"\b0 of \d+ prerequisite groups?\b",
+    # A target that cannot be hit is a denial, and none of the above saw it.
+    # The GPA question scored 0/3 "never states the negative" on three answers
+    # that all said so: "not reachable with this load", "which is not
+    # achievable", "above the maximum possible grade".
+    r"\bnot\s+(reachable|achievable|attainable|possible|feasible|viable)\b",
+    r"\bcan ?n[o']?t be (met|reached|achieved|hit|done)\b",
+    r"\bcannot be (met|reached|achieved|hit|done)\b",
+    r"\babove the maximum\b|\bexceeds the maximum\b",
+    r"\bimpossible\b",
 )
 _CLAIMS_NO = re.compile("|".join(_NEGATIVE_CLAIMS), re.IGNORECASE | re.MULTILINE)
 
