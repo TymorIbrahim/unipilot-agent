@@ -20,7 +20,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # well before it and ship whatever the agent has grounded so far, because a
 # partial honest answer scores and a timeout does not.
 VERCEL_HARD_LIMIT_S = 300.0
-DEFAULT_TIME_BUDGET_S = 240.0
+DEFAULT_TIME_BUDGET_S = 270.0
+"""The wall clock by which the loop must have RETURNED, not started its last turn.
+
+Was 240, chosen when the loop only checked `elapsed >= budget` -- which bounds
+when a turn BEGINS, so the 60s gap below the platform limit was an implicit
+allowance for it to finish. `run_loop` now reserves the longest turn it has
+actually measured, making that allowance explicit and evidence-based, and
+keeping 240 as well subtracted the margin twice: a live run stopped at 186s of
+240 with a 55s reserve, giving up on a question it would have answered by 260 --
+comfortably inside the platform's 300.
+
+So this is the real deadline now, and the reserve is what keeps a turn from
+crossing it."""
 
 
 LLMOD_HOST = "api.llmod.ai"
@@ -138,6 +150,10 @@ class Settings(BaseSettings):
         A budget above 300s cannot be honoured -- Vercel terminates the call
         first -- so a misconfiguration here would silently reintroduce exactly
         the timeout this budget exists to prevent.
+
+        The 30s held back is for the response itself: serialising a full `steps`
+        trace and getting it onto the wire is not free, and the budget governs
+        the loop rather than the request around it.
         """
         return min(self.time_budget_s, VERCEL_HARD_LIMIT_S - 30.0)
 
