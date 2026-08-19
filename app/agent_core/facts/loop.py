@@ -120,6 +120,14 @@ async def run_loop(
     number of turns or model calls: a hard turn cap kills a run that was one
     step from done, where a time budget lets it think for as long as it is
     actually making progress inside the window.
+
+    It bounds when a turn may START, and reserves the longest turn seen so far
+    so the run also FINISHES inside the window. Without that reserve the bound
+    is only on the last turn's start: a live "how many semesters" run began a
+    turn at 235s of 240 and returned at 267s. The platform kills the request at
+    300s, and a killed request answers with the platform's error instead of the
+    four fields, which is the one failure mode that escapes every other
+    guarantee here.
     """
     result = LoopResult(outcome="exhausted", facts=context.facts)
     observations: list[str] = []
@@ -127,16 +135,40 @@ async def run_loop(
     rejections = 0
     seen_derivations: set[str] = set()
     started = time.monotonic()
+    longest_turn = 0.0
 
     for turn in range(1, max_turns + 1):
-        if time_budget_s is not None and time.monotonic() - started >= time_budget_s:
+        elapsed = time.monotonic() - started
+        # Do not START a turn there is no room to FINISH. Checking only
+        # `elapsed >= budget` bounds when the last turn begins, not when it
+        # ends: a live run began a turn at 235s of a 240s budget and returned at
+        # 267s. The platform kills the request at 300s, and past that the
+        # response is the platform's error rather than the four fields the
+        # contract promises -- so the overrun is the one failure that escapes
+        # every guarantee this loop makes.
+        #
+        # The reserve is the longest turn this run has actually taken, which is
+        # the best evidence available for what the next one will cost. Before
+        # any turn has finished there is nothing to go on, so the first is
+        # always allowed: a budget that refuses to start is worse than one that
+        # overruns.
+        if time_budget_s is not None and elapsed + longest_turn >= time_budget_s:
             result.outcome = "exhausted"
-            result.reason = f"the {time_budget_s:.0f}s time budget was spent before an answer was reached"
+            result.reason = (
+                f"the {time_budget_s:.0f}s time budget was spent before an answer was reached"
+                if longest_turn == 0.0
+                else (
+                    f"stopped after {elapsed:.0f}s of a {time_budget_s:.0f}s budget: another turn "
+                    f"has been taking up to {longest_turn:.0f}s and would overrun it"
+                )
+            )
             result.transcript.append(Turn(turn, "timeout", result.reason))
             return result
 
         result.turns = turn
+        turn_started = time.monotonic()
         reply = await model.respond(_prompt(question, context, observations, history))
+        longest_turn = max(longest_turn, time.monotonic() - turn_started)
         if on_progress is not None:
             _report_progress(on_progress, reply)
 
