@@ -345,7 +345,22 @@ def _did_you_mean(unknown: tuple, facts: Mapping[str, object]) -> str:
 
 
 _DOUBLED_YES = re.compile(r"\b(yes|no)\b([\s,;:.—–-]+)\b\1\b", re.IGNORECASE)
-_STRANDED_YES = re.compile(r"\b(are|is|am|was|were)\s+(yes|no)\s+(?=[a-z])", re.IGNORECASE)
+_STRANDED_YES = re.compile(
+    # An adverb may sit between the copula and the stranded word: a live answer
+    # read "You are ALREADY yes eligible for 00960324", which the adjacent-only
+    # pattern missed. At most one word, so this stays a local repair and cannot
+    # reach across a clause.
+    #
+    # The lookahead is what keeps it a repair rather than a mangling. "The
+    # answer is yes and the course is open" has a yes that IS the predicate, and
+    # deleting it leaves "The answer is and the course is open" -- which the
+    # original adjacent-only pattern did too, so this is an old bug the widening
+    # would have made louder. A stranded yes is followed by the word it wrongly
+    # qualifies; a real one is followed by a conjunction or a clause.
+    r"\b(are|is|am|was|were)(\s+\w+)?\s+(yes|no)\s+"
+    r"(?!and\b|or\b|but\b|so\b|because\b|then\b|which\b|that\b|if\b|while\b)(?=[a-z])",
+    re.IGNORECASE,
+)
 
 
 def _tidy_affirmations(text: str) -> str:
@@ -364,7 +379,7 @@ def _tidy_affirmations(text: str) -> str:
     answer CLAIMS. Both rewrites drop a redundant word and touch nothing else.
     """
     tidied = _DOUBLED_YES.sub(lambda m: m.group(1), text)
-    tidied = _STRANDED_YES.sub(lambda m: f"{m.group(1)} ", tidied)
+    tidied = _STRANDED_YES.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} ", tidied)
     return _STUTTERED_PHRASE.sub(lambda m: m.group(1), tidied)
 
 

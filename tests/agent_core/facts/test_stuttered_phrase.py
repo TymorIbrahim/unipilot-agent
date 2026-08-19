@@ -78,3 +78,44 @@ class TestItComposesWithTheBoolRepairs:
 
     def test_a_stranded_yes_still_clears(self) -> None:
         assert "yes eligible" not in tidy("You are yes eligible to take 00960211.")
+
+
+class TestAStrandedYesWithAnAdverb:
+    """"You are ALREADY yes eligible for 00960324" -- a live answer.
+
+    The repair required the copula and the stranded word to be adjacent, so an
+    adverb between them hid it. Widening that exposed an older bug in the same
+    pattern: "The answer is yes and the course is open" has a yes that IS the
+    predicate, and the adjacent-only version deleted it too, leaving "The answer
+    is and the course is open".
+
+    A stranded yes is followed by the word it wrongly qualifies; a real one is
+    followed by a conjunction or a clause. That is the whole distinction.
+    """
+
+    def test_the_live_answer_is_repaired(self) -> None:
+        assert tidy("You are already yes eligible for 00960324.") == (
+            "You are already eligible for 00960324."
+        )
+
+    def test_the_adjacent_case_still_works(self) -> None:
+        assert tidy("You are yes eligible for 00960324.") == "You are eligible for 00960324."
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "The answer is yes and the course is open.",
+            "The answer is yes because you passed 00940314.",
+            "It is yes so you may register.",
+            "The verdict is yes, which means you are eligible.",
+        ],
+        ids=["and", "because", "so", "which"],
+    )
+    def test_a_yes_that_is_the_predicate_survives(self, text: str) -> None:
+        assert tidy(text) == text
+
+    def test_a_bare_verdict_is_untouched(self) -> None:
+        assert tidy("Eligible: yes.") == "Eligible: yes."
+
+    def test_a_negation_is_not_mistaken_for_a_stranded_no(self) -> None:
+        assert tidy("You are not eligible.") == "You are not eligible."

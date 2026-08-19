@@ -226,6 +226,19 @@ COURSE_OFFERINGS = SourceSchema(
         "catalogVersion": _I,
         "status": _I,
     },
+    field_notes={
+        "academicYear": (
+            "these are RECORDED offerings and the record ENDS at the present year. Filtering for a "
+            "future year matches 0 rows because it has not happened yet -- that is silence, not "
+            "evidence the course will not run. NEVER answer 'will it be offered' from a count of "
+            "future rows: fetch the WHOLE history and pass it to `forecast`."
+        ),
+        "semesterName": (
+            "spring / summer / winter -- the period `forecast` keys on. Give it as `period_path` "
+            "with `cycle_path: academicYear`, so the rate is 'in how many YEARS did this term "
+            "occur' and not 'what share of all offerings were this term'."
+        ),
+    },
     basis=Basis.OFFICIAL_RECORD,
     joins=(("courseNumber", "courses.courseNumber"),),
     object_id_fields=frozenset({"_id"}),
