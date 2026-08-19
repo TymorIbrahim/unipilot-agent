@@ -95,7 +95,12 @@ PRIMITIVES: tuple[ToolSpec, ...] = (
             "list, its electives, and notes about specific courses. For 'what must I do to "
             "graduate' read the REGULATIONS; a track page's line on the same topic is usually a "
             "note about one course, and answering from it gives a deadline where the requirement "
-            "was asked for. When both look relevant, read both and say which is which."
+            "was asked for. When both look relevant, read both and say which is which.\n"
+            "     ONE SEARCH PER PAGE. Retrieved passages accumulate by slug and the WHOLE page is "
+            "kept where it can be fetched, so if the slug you want is already among your hits, "
+            "searching again for it returns what you are holding. Rephrasing the query does not "
+            "change that -- go straight to `interpret` or `extract_list` on the slug. Live planning "
+            "runs routinely spent two consecutive turns on near-identical queries for one page."
         ),
         example={"tool": "search_corpus", "as": "policy_hits", "args": {"query": "industrial engineering track required courses and electives", "limit": 5}},
         requires="retriever",

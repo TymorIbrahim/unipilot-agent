@@ -1,29 +1,29 @@
 [
   {
-    "id": "semesters_to_graduate",
+    "id": "prerequisite_chain_00970135",
     "run": 0,
-    "verdict": "wrong",
-    "why": "declined to answer a question the data supports",
-    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
-    "steps": 13,
-    "elapsed_s": 255.0
+    "verdict": "incomplete",
+    "why": "right answer, but never states 00940314",
+    "answer": "Before you can take 00970135, you need 00960324 first. The good news is that 00960324 is already takeable now: yes.",
+    "steps": 7,
+    "elapsed_s": 46.3
   },
   {
-    "id": "semesters_to_graduate",
+    "id": "prerequisite_chain_00970135",
     "run": 1,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "It will take you 2 semesters to graduate.\n\nPlan by term:\n- term winter · courses 6 · credits_total 16\n- term spring · courses 3 · credits_total 8.5\n\nWinter courses:\n- number 00940704 · name סדנת תכנות בשפת סי · type mandatory · credits 1.5\n- number 00960578 · name בחירה חברתית והחלטות משותפות · type elective · credits 2.5\n- number 00960606 · name כלכלה התנהגותית בסביבה טכנולוגית · type elective · credits 3\n- number 00960620 · name Introduction to Human Factors Engineering · type elective · credits 3.5\n- number 00970317 · name תורת המשחקים השיתופיים · type elective · credits 2.5\n- number 00970325 · name תיאוריה ושיטות באופטימיזציה דלילה · type elective · credits 3\n\nSpring courses:\n- number 00970800 · name עקרונות השיווק · type mandatory · credits 3.5\n- number 00960212 · name מודלים גרפים הסתברותיים · type elective · credits 2\n- number 00970414 · name סטטיסטיקה 2 · type elective · credits 3",
-    "steps": 13,
-    "elapsed_s": 202.1
+    "verdict": "incomplete",
+    "why": "right answer, but never states 00940314",
+    "answer": "Before you can take this course, you need to complete 00960324 first. You have not passed it yet (0 passed), but 00960324 is already eligible now (1 of 1 prerequisite groups met), so that is the next step.",
+    "steps": 6,
+    "elapsed_s": 39.6
   },
   {
-    "id": "semesters_to_graduate",
+    "id": "prerequisite_chain_00970135",
     "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You need 2 semesters.\n\n- term winter · courses 5 · credits_total 14.5\n- term spring · courses 3 · credits_total 8.5\n\nYour full course plan is 00960578, 00960606, 00960620, 00970317, 00970325, 00960212, 00960600, 00970414.",
-    "steps": 10,
-    "elapsed_s": 184.2
+    "verdict": "incomplete",
+    "why": "right answer, but never states 00940314",
+    "answer": "Before you can take 00970135, you need 00960324 first. That blocker course is already takeable: you meet 1 of 1 prerequisite groups for it.",
+    "steps": 4,
+    "elapsed_s": 32.1
   }
 ]

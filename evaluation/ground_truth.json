@@ -182,13 +182,15 @@
         "why_eligible": "00960324 needs any one of 00940314 or 00980413; 00940314 is passed"
       },
       "must_contain": [
-        "00960324"
+        "00960324",
+        "00940314"
       ],
       "must_not_contain": [],
       "derivation": "prerequisite_edges: 00970135 has ONE group with ONE member, 00960324, which the student has not passed -- so 00970135 is blocked. 00960324 in turn has one group, any one of 00940314 or 00980413, and the student HAS passed 00940314. So the chain is exactly two deep and the actionable answer is: take 00960324 next, then 00970135 opens.",
       "contested": false,
       "trap": "Every eligibility question tested so far is ONE hop -- is this course's group satisfied, yes or no. This needs the answer to the second hop too, or it stops at 'you need 00960324' without saying that course is already available. `traverse` exists for exactly this and has appeared in ZERO live runs; the model has always reached for a one-hop `find` on the edges.",
-      "ideal_answer": "You need 00960324 first -- it is 00970135's only prerequisite and you have not passed it. You are already eligible for 00960324, since it needs either 00940314 or 00980413 and you passed 00940314. So take 00960324, and 00970135 opens up after it."
+      "ideal_answer": "You need 00960324 first -- it is 00970135's only prerequisite and you have not passed it. You are already eligible for 00960324, since it needs either 00940314 or 00980413 and you passed 00940314. So take 00960324, and 00970135 opens up after it.",
+      "note_on_scoring": "must_contain names BOTH hops. It listed only 00960324 at first, and all three live runs scored PASS while answering only the first: 'you need 00960324', full stop. That is true and unactionable -- the useful half is that 00960324 is ALREADY available, because 00940314 is passed. A test that a one-hop answer satisfies does not test a chain."
     },
     {
       "id": "semesters_to_graduate",
