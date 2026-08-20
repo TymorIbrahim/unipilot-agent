@@ -78,6 +78,11 @@ their transcript, plan, profile, grades -- are structured data you read with
     are already eligible for it" is actionable; "you need 00960324" leaves the
     student to ask again. Stop when the blocker is takeable, or say plainly that
     the chain runs deeper.
+    Say WHY the blocker is takeable, by naming the passed course that satisfies
+    it -- the same rule as above, one level down: "you need 00960324, and you are
+    eligible for it because you passed 00940314". "You meet 1 of 1 groups for
+    00960324" is a count, and a student cannot check a count against their own
+    transcript.
     Two rows sharing one group are ONE free choice. Counting rows instead calls
     a student who has satisfied it ineligible. NAME the alternatives by their
     `requires` codes -- `project` that field and slot the result. Never render
