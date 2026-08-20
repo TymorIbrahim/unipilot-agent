@@ -203,15 +203,19 @@ def scores(
     elif stance == "deny":
         if not claims_no(text):
             return "wrong", "never states the negative, and the data says no"
+    # A give-up is not a thin answer, and it is not a correct one either. Every
+    # question in the ground truth is answerable from the data by construction,
+    # so declining one is a failure whatever else the text does or does not say.
+    #
+    # Checked BEFORE the numbers, not inside the `missing` branch where it
+    # started: a question with an empty `must_contain` -- which
+    # `semesters_to_graduate` needs, since 2 is a floor and 3 is also right --
+    # never reached it, and "I wasn't able to work that out" scored CORRECT.
+    if denies_knowledge(text):
+        return "wrong", "declined to answer a question the data supports"
+
     missing = [v for v in must if not states_number(text, v)]
     if missing:
-        # A give-up is not a thin answer. "I wasn't able to work that out from
-        # your records" scored `incomplete` -- "right answer, but never states
-        # 2" -- for a run that answered nothing at all. Every question here is
-        # answerable from the data by construction, so declining one is a
-        # failure, and calling it right-but-thin flatters the score.
-        if denies_knowledge(text):
-            return "wrong", "declined to answer a question the data supports"
         return "incomplete", f"right answer, but never states {', '.join(str(m) for m in missing)}"
     return "correct", "matches ground truth"
 

@@ -302,6 +302,14 @@ class TestAGiveUpIsNotAThinAnswer:
         assert verdict == "wrong"
         assert "declined" in why
 
+    def test_it_is_caught_with_no_must_contain_at_all(self) -> None:
+        """The check started inside the `missing` branch, so a question with an
+        empty `must_contain` never reached it and a give-up scored CORRECT.
+        `semesters_to_graduate` needs that empty list -- 2 is a floor and 3 is
+        also right -- which is exactly where it went unnoticed."""
+        verdict, why = scores(self.GAVE_UP, must=(), must_not=("1.42",))
+        assert verdict == "wrong" and "declined" in why
+
     def test_a_genuinely_thin_answer_is_still_thin(self) -> None:
         verdict, _ = scores(
             "No. You meet 0 of 1 prerequisite groups.",

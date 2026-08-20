@@ -200,9 +200,7 @@
         "remaining_credits": 25.5,
         "cap_per_semester": 18.0
       },
-      "must_contain": [
-        "2"
-      ],
+      "must_contain": [],
       "must_not_contain": [
         "1.42",
         "1.4"
@@ -210,7 +208,8 @@
       "derivation": "155 required - 129.5 completed = 25.5 remaining. student_profiles.maxCreditsPerSemester = 18.0. ceil(25.5 / 18.0) = 2, so TWO semesters is the floor. It is a floor and not a promise: a live winter plan placed only 16 of the 18 credits once offerings, exam dates and timetable conflicts were applied, so the true answer may be more than 2 and must never be fewer.",
       "contested": false,
       "trap": "`optimize` is the tool for placing courses across several slots and has appeared in ZERO live runs. Two failure modes: a fractional answer (1.42 semesters -- a term cannot be part-taken, and `check_periods_are_whole` should refuse it), and a single-semester answer that ignores the 18-credit cap.",
-      "ideal_answer": "At least 2 semesters: you need 25.5 more credits and your cap is 18 per semester. Splitting them, a first term of up to 18 credits and a second of the remainder -- though what is actually offered each term may stretch it further."
+      "ideal_answer": "At least 2 semesters: you need 25.5 more credits and your cap is 18 per semester. Splitting them, a first term of up to 18 credits and a second of the remainder -- though what is actually offered each term may stretch it further.",
+      "note_on_scoring": "must_contain is EMPTY, and that is the derivation being honest rather than the bar being lowered. 2 is a FLOOR -- ceil(25.5 / 18) -- not a promise: a live plan placed only 16 of 18 credits once offerings, exam dates and timetable conflicts were applied, so 3 semesters is a legitimate answer and 1 is not. Requiring the literal '2' failed a run that correctly said 3. What must never appear is a FRACTION of a semester, which `check_periods_are_whole` also refuses."
     }
   ]
 }

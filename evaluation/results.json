@@ -1,29 +1,245 @@
 [
   {
+    "id": "credits_completed",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 20.5
+  },
+  {
+    "id": "credits_completed",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 4.8
+  },
+  {
+    "id": "credits_completed",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have completed 129.5 credits so far.",
+    "steps": 2,
+    "elapsed_s": 5.0
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your degree requires 155 credits, and you still need 25.5.",
+    "steps": 2,
+    "elapsed_s": 10.6
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your degree requires 155 credits total, and you still need 25.5.",
+    "steps": 3,
+    "elapsed_s": 17.7
+  },
+  {
+    "id": "credits_required_and_remaining",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your degree requires 155 credits in total, and you still need 25.5 credits to finish.",
+    "steps": 3,
+    "elapsed_s": 13.6
+  },
+  {
+    "id": "english_requirement",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You have to satisfy 2 English-language courses to graduate.",
+    "steps": 4,
+    "elapsed_s": 14.2
+  },
+  {
+    "id": "english_requirement",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You must satisfy 2 English-language courses to graduate.",
+    "steps": 4,
+    "elapsed_s": 14.2
+  },
+  {
+    "id": "english_requirement",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need 2 English-language courses to graduate.",
+    "steps": 4,
+    "elapsed_s": 31.6
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "For 00960211, you are yes. It requires 1 prerequisite group: any one of 00940224, 00940226.",
+    "steps": 5,
+    "elapsed_s": 62.5
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You are eligible -- you meet 1 of 1 prerequisite groups. 00960211 requires 1 group: any one of 00940224, 00940226.",
+    "steps": 3,
+    "elapsed_s": 48.3
+  },
+  {
+    "id": "eligibility_00960211",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "yes — 00960211 has 1 prerequisite group: any one of 00940224, 00940226. You have already met 1 of 1 groups, with no unmet groups.",
+    "steps": 3,
+    "elapsed_s": 30.6
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "01040174 is not eligible: it has 1 prerequisite group and you meet 0. You need any one of 01040066, 01040166.",
+    "steps": 3,
+    "elapsed_s": 22.2
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 1,
+    "verdict": "wrong",
+    "why": "never states the negative, and the data says no",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 6,
+    "elapsed_s": 38.8
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "No — 01040174 needs any one of 01040066, 01040166, and you have passed none of them.",
+    "steps": 5,
+    "elapsed_s": 26.2
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "The course is offered next spring: yes.",
+    "steps": 2,
+    "elapsed_s": 9.8
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "yes — 00940412 is forecast to be offered next spring.",
+    "steps": 3,
+    "elapsed_s": 17.2
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "The forecast says it will be offered next spring: yes.",
+    "steps": 2,
+    "elapsed_s": 12.1
+  },
+  {
+    "id": "gpa_target_impossible",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your current GPA is 74.45. Across your remaining 25.5 credits, the joint minimum would be 138.57 in every remaining course, but that target is not reachable. Feasibility: no.",
+    "steps": 4,
+    "elapsed_s": 75.5
+  },
+  {
+    "id": "gpa_target_impossible",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your current GPA is 74.45, which is below the target. To reach it across your remaining courses, you would need at least 138.57 in every remaining course across 25.5 credits. That requirement is above the maximum possible grade, so the target is not reachable with this load.",
+    "steps": 4,
+    "elapsed_s": 66.8
+  },
+  {
+    "id": "gpa_target_impossible",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Your current GPA is 74.45. Across your remaining 25.5 credits, the joint minimum grade needed in every remaining course is 138.57. Because 138.57 is above the maximum possible course grade, the target GPA is not reachable with this load.",
+    "steps": 4,
+    "elapsed_s": 68.7
+  },
+  {
     "id": "prerequisite_chain_00970135",
     "run": 0,
     "verdict": "incomplete",
     "why": "right answer, but never states 00940314",
-    "answer": "Before you can take 00970135, you need 00960324 first. The good news is that 00960324 is already takeable now: yes.",
-    "steps": 7,
-    "elapsed_s": 46.3
+    "answer": "You need 00960324 first. 00960324 is already takeable now: it has 1 prerequisite group, and you have already satisfied it by passing 00980413. So the path is: take 00960324, then you can take 00970135.",
+    "steps": 6,
+    "elapsed_s": 51.2
   },
   {
     "id": "prerequisite_chain_00970135",
     "run": 1,
     "verdict": "incomplete",
     "why": "right answer, but never states 00940314",
-    "answer": "Before you can take this course, you need to complete 00960324 first. You have not passed it yet (0 passed), but 00960324 is already eligible now (1 of 1 prerequisite groups met), so that is the next step.",
-    "steps": 6,
-    "elapsed_s": 39.6
+    "answer": "Before you can take 00970135, you need 00960324 first. yes -- you already meet the prerequisite for 00960324, so that blocker can be taken now. The requirement for 00970135 is the one prerequisite group in 1, and it is satisfied only by 00960324.",
+    "steps": 3,
+    "elapsed_s": 39.2
   },
   {
     "id": "prerequisite_chain_00970135",
     "run": 2,
-    "verdict": "incomplete",
-    "why": "right answer, but never states 00940314",
-    "answer": "Before you can take 00970135, you need 00960324 first. That blocker course is already takeable: you meet 1 of 1 prerequisite groups for it.",
-    "steps": 4,
-    "elapsed_s": 32.1
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need to take 00960324 first. You have not passed any of its direct prerequisite choices yet: 0 of 2 are met. To get into that blocker, you need any one of 00940314, 00980413.",
+    "steps": 5,
+    "elapsed_s": 47.3
+  },
+  {
+    "id": "semesters_to_graduate",
+    "run": 0,
+    "verdict": "wrong",
+    "why": "declined to answer a question the data supports",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 6,
+    "elapsed_s": 252.7
+  },
+  {
+    "id": "semesters_to_graduate",
+    "run": 1,
+    "verdict": "wrong",
+    "why": "declined to answer a question the data supports",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 15,
+    "elapsed_s": 243.8
+  },
+  {
+    "id": "semesters_to_graduate",
+    "run": 2,
+    "verdict": "wrong",
+    "why": "declined to answer a question the data supports",
+    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
+    "steps": 12,
+    "elapsed_s": 245.9
   }
 ]
