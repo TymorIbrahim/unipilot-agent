@@ -42,6 +42,7 @@ from app.agent_core.facts.postconditions import (
     check_eligibility_is_not_self_contradictory,
     check_no_edge_identifiers,
     check_periods_are_whole,
+    check_count_states_its_basis,
     check_no_group_identifiers,
     check_gpa_in_range,
     check_grades_in_range,
@@ -109,6 +110,13 @@ def verify_answer(
     violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)
 
+    # Also on every answer, not only plan-shaped ones: "it will take you 2
+    # semesters" needs its credits whether or not the reply slots a plan
+    # collection beside it.
+    requirement = _remaining_required(facts)
+    if requirement is not None:
+        violations += check_count_states_its_basis(answer.text, requirement)
+
     collections = list(_plan_collections(answer, facts))
     courses = [course for _, term_courses in collections for course in term_courses]
     if not courses:
@@ -152,7 +160,6 @@ def verify_answer(
     # and is marked simulated at the tool that built it; a record of what is on
     # offer is not. The per-term checks above run a 40-credit range check and a
     # cap check, both of which a listing survives, so only this one needed it.
-    requirement = _remaining_required(facts)
     planned = [
         sum(course.credits for course in term_courses)
         for name, term_courses in collections

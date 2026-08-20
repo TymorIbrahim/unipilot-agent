@@ -433,6 +433,58 @@ def check_term_within_cap(
     ]
 
 
+_PERIOD_COUNT = re.compile(
+    r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight)\s+"
+    r"(?:more\s+|additional\s+|further\s+|extra\s+)?(?:semesters?|terms?)\b",
+    re.IGNORECASE,
+)
+
+
+def _states(text: str, number: float) -> bool:
+    """Whether this number really appears, not merely its digits inside another.
+
+    Bounded the same way the eval scorer's `states_number` is, and for the same
+    reason: 155 must not satisfy a check for 15, while a number ENDING A
+    SENTENCE still counts."""
+    needle = f"{number:g}"
+    return re.search(rf"(?<![\d.]){re.escape(needle)}(?!\d)(?!\.\d)", text or "") is not None
+
+
+def check_count_states_its_basis(text: str, remaining_required: float) -> list[Violation]:
+    """A count of semesters must carry the credits it was derived from.
+
+    Three live runs answered "It will take you 2 semesters to graduate", then
+    listed the terms. The count is right and the student cannot check it: the
+    same sentence would be produced by a correct derivation, by counting however
+    many terms the planner happened to fill, and by a guess. All three runs held
+    25.5, 155 and 129.5 throughout and slotted none of them.
+
+    Asking for it in the prompt did not work -- it was added to the system
+    prompt in the same voice as the rules that do hold, and the next three runs
+    answered exactly as before. So it is checked, which is what this file is for.
+
+    Fires only when the requirement is actually HELD, so an answer that could
+    not have cited it is not punished for the omission. This is not a style
+    rule: a number a reader cannot verify is the shape every wrong answer in
+    this project has taken, and the credits are what separate a derivation from
+    a coincidence.
+    """
+    if remaining_required <= 0 or not _PERIOD_COUNT.search(text or ""):
+        return []
+    if _states(text, remaining_required):
+        return []
+    return [
+        Violation(
+            "count_without_basis",
+            f"the answer says how many semesters but never states the {remaining_required:g} "
+            "credits it follows from, so the student cannot check it. Slot the credits still "
+            "needed and the per-semester cap alongside the count -- \"you need {credits} more "
+            "credits and your cap is {cap} per semester, so {semesters}\" -- rather than the "
+            "count alone.",
+        )
+    ]
+
+
 def check_plan_within_requirement(
     planned_credits: float, remaining_required: float, cap: float
 ) -> list[Violation]:

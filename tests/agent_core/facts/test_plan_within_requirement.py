@@ -34,7 +34,10 @@ from __future__ import annotations
 
 from app.agent_core.facts.answer import HeldFact
 from app.agent_core.facts.answer_verify import _remaining_required, verify_answer
-from app.agent_core.facts.postconditions import check_plan_within_requirement
+from app.agent_core.facts.postconditions import (
+    check_count_states_its_basis,
+    check_plan_within_requirement,
+)
 from app.agent_core.facts.types import (
     Basis,
     Collection,
@@ -225,3 +228,73 @@ class TestOnlyAPlanIsJudged:
         facts["offerings"] = HeldFact(value=_summary([20.0]), basis=Basis.OFFICIAL_RECORD)
         violations = verify_answer(_Answer(["plan", "offerings"]), facts, self.QUESTION)
         assert "plan_exceeds_requirement" in [v.kind for v in violations]
+
+
+class TestACountMustShowItsWorking:
+    """Three live runs answered "It will take you 2 semesters to graduate" and
+    listed the terms. Right, stable -- and unverifiable: the same sentence comes
+    out of a correct derivation, of counting however many terms the planner
+    filled, and of a guess. All three held 25.5, 155 and 129.5 throughout and
+    slotted none of them.
+
+    Asking in the system prompt did not work. The instruction went in beside
+    rules that do hold, and the next three runs answered exactly as before, so
+    it is checked instead.
+    """
+
+    QUESTION = "How many semesters will it take me to graduate?"
+
+    def test_a_bare_count_is_refused(self) -> None:
+        violations = check_count_states_its_basis(
+            "It will take you 2 semesters to graduate.", REMAINING
+        )
+        assert [v.kind for v in violations] == ["count_without_basis"]
+
+    def test_a_count_with_its_credits_passes(self) -> None:
+        assert check_count_states_its_basis(
+            "You need 25.5 more credits at 18 per semester, so 2 semesters.", REMAINING
+        ) == []
+
+    def test_an_answer_with_no_count_is_untouched(self) -> None:
+        """Only a COUNT needs this basis; an ordinary term plan says nothing
+        about how long the degree takes."""
+        assert check_count_states_its_basis(
+            "Winter — 16 credits: 00940704, 00960578.", REMAINING
+        ) == []
+
+    def test_a_word_count_is_still_a_count(self) -> None:
+        violations = check_count_states_its_basis("You need two more semesters.", REMAINING)
+        assert [v.kind for v in violations] == ["count_without_basis"]
+
+    def test_a_near_miss_number_does_not_satisfy_it(self) -> None:
+        """155 must not pass as 25.5, and 5 must not pass as 25.5."""
+        violations = check_count_states_its_basis(
+            "Across 2 semesters you have 155 credits in the degree.", REMAINING
+        )
+        assert [v.kind for v in violations] == ["count_without_basis"]
+
+    def test_no_requirement_held_means_no_demand(self) -> None:
+        assert check_count_states_its_basis("It will take 2 semesters.", 0.0) == []
+
+    def test_it_runs_on_an_answer_holding_no_plan(self) -> None:
+        """The count needs its credits whether or not a plan is slotted beside
+        it, so this check sits with the text checks, not the plan ones."""
+        facts = {
+            "credits_required": HeldFact(value=Scalar(Q, REQUIRED), basis=Basis.OFFICIAL_RECORD),
+            "completed_credits": HeldFact(value=Scalar(Q, COMPLETED), basis=Basis.OFFICIAL_RECORD),
+        }
+        violations = verify_answer(_Answer([], "It will take you 2 semesters."),
+                                   facts, self.QUESTION)
+        assert [v.kind for v in violations] == ["count_without_basis"]
+
+    def test_the_live_thin_answer_is_caught(self) -> None:
+        answer = _Answer(["plan"], "It will take you 2 semesters to graduate.\n{plan:detail}")
+        violations = verify_answer(answer, _facts(RUN_0_TERMS), self.QUESTION)
+        assert "count_without_basis" in [v.kind for v in violations]
+
+    def test_the_same_answer_with_its_credits_ships(self) -> None:
+        answer = _Answer(
+            ["plan"],
+            "You need 25.5 more credits at 18 per semester, so 2 semesters.\n{plan:detail}",
+        )
+        assert verify_answer(answer, _facts(RUN_0_TERMS), self.QUESTION) == []
