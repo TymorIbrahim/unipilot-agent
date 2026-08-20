@@ -108,13 +108,24 @@ their transcript, plan, profile, grades -- are structured data you read with
     is grounded and verified against its quote, but the noun you then write
     beside it is not. Interpreting the phrase puts the unit inside the fact,
     where the quote check covers it too.
-  - WHICH courses are required vs elective is on that SAME wiki page, in named
-    sections ("Required Courses by Semester", "Faculty Elective Requirements").
-    You do not guess a course's type -- you read it: `search_corpus` for the
-    electives section, then `extract_list` its course codes (ONE call returns the
-    whole set), and a course is an elective exactly when its number is `in` that
-    set. This is how the wiki's own classification, not your memory, labels a
-    plan.
+  - WHICH courses are required vs elective is the `category` column of
+    `track_courses`: "mandatory" or "elective", read off the section of the
+    track page that lists each course. It arrives with the membership row, so
+    the split costs you nothing. Only where `category` is EMPTY does the wiki
+    route apply -- `search_corpus` the electives section, `extract_list` its
+    codes (ONE call returns the whole set), and a course is an elective exactly
+    when its number is `in` that set. Reach for that route by default and you
+    spend three or four turns rebuilding a column you were already handed, and
+    the collections come back TRUNCATED, so anything counted over them is
+    refused.
+  - HOW MANY OF THEM TO PLAN is decided by credits, not by the course list. A
+    track lists more courses than the degree requires, because its electives are
+    choices: this student has 21 unfinished courses worth 50.0 credits and needs
+    25.5 more to graduate. Take every "mandatory" one, then add electives only
+    until the running total reaches `degree_programs.totalCredits` minus
+    completed credits -- and plan THAT set. Handing the whole unfinished list to
+    a planner schedules courses the student never has to take, and the extra
+    credits become extra semesters in the answer.
 The plain `find` sources (courses, degree_programs) hold the raw catalog and the
 credit TOTAL, not the structure; reaching for them to learn what a degree
 requires is the most common wrong turn. A question about the shape of a program
@@ -143,6 +154,15 @@ prints one line PER record showing ALL its fields as "label value", under
 whatever names you `project`ed them to -- this is how you show a TABLE (a
 semester plan, a per-course breakdown with credits and grades), not just a list
 of names. Name the fields well and the labels read well.
+
+A COUNT OF SEMESTERS MUST CARRY THE CREDITS IT CAME FROM. "It will take you
+{semesters} semesters" is a number a student cannot check; "you need
+{credits_needed} more credits and your cap is {cap} per semester, so
+{semesters}" is one they can. Derive the count as ceil(credits_needed / cap) --
+rounded UP, because a semester cannot be part-taken -- and slot all three. Do
+NOT read the count off how many terms a plan came back with: that is decided by
+how many terms you ASKED the planner for, so asking for six returns a longer
+degree than asking for two, on the same records.
 
 ALWAYS `project` BEFORE `:detail`. It prints every field the record carries, so
 slotting a row straight from `find` shows the reader the catalog's own
@@ -180,30 +200,32 @@ the actual plan, and stopping before it answers nothing:
       relabels an ObjectId, and the step-5 difference then matches nothing and
       silently reports every course as still remaining)
   5. compute: remaining = (step-3 courses) difference (step-4) on courseNumber
-  6. label each remaining course's TYPE from the wiki, not from memory. The track
-     page has TWO course sections; extract_list the codes from EACH:
-       - "Faculty Elective Requirements" section -> elective_codes
-       - "Required Courses by Semester" section  -> required_codes
-     Extraction is BEST-EFFORT (a section can list more codes than one read
-     returns), so classify by POSITIVE membership and keep the REST as
-     "unclassified" -- do NOT use `difference`/"not in", an extracted set is never
-     complete so differencing against it is refused:
-       electives  = select remaining where courseNumber in {elective_codes,
-                    field:"value"}, then extend {"type": {"value": "elective"}}
-       required   = select remaining where courseNumber in {required_codes,
-                    field:"value"}, then extend {"type": {"value": "required"}}
-       fallback   = remaining, extend {"type": {"value": "unclassified"}}
-       items_typed = union(electives, union(required, fallback))
-     List electives and required FIRST so that when a later de-dup by courseNumber
-     keeps the first, the classified label wins and "unclassified" survives only
-     where the wiki read genuinely missed a course. Every remaining course is
-     kept -- none is dropped for lacking a type. The `type` becomes each course's
-     planning PRIORITY next: a required course is seated before an elective when
-     the credit cap binds.
+  6. each remaining course's TYPE is already on its `track_courses` row, in
+     `category`: "mandatory" or "elective". Carry it through step 5's difference
+     and you are done -- no wiki read, no extract_list. Where `category` is
+     EMPTY for a track, and only there, fall back to the page's two sections
+     ("Required Courses by Semester" -> required, "Faculty Elective
+     Requirements" -> elective), classifying by POSITIVE membership and keeping
+     the rest "unclassified": an extracted set is never complete, so
+     `difference`/"not in" against it is refused.
+  6b. CUT THE SET DOWN TO WHAT THE DEGREE STILL NEEDS, before planning anything.
+     A track lists more courses than the degree requires, because its electives
+     are choices. Compute the gap ONCE --
+       credits_needed = degree_programs.totalCredits - sum(completed_courses
+                        .creditsCounted for passed rows)
+     -- then take every "mandatory" remaining course, and add electives only
+     until the running total reaches credits_needed. That set is what you plan.
+     Skipping this is the single most expensive mistake here: a live run handed
+     all 21 unfinished courses (50.0 credits) to the planner against a 25.5-
+     credit requirement, and answered "4 semesters" where the truth is 2. The
+     planner places what you give it; it cannot know which electives are
+     optional, because at this level they all are.
   7. plan_term -- the domain shortcut that BUILDS the term. Two arguments:
-     - candidates = the NAME of your items_typed fact -- the WHOLE remaining set,
-       every course, not a hand-picked few (a thin candidate list makes a thin
-       plan). You name the collection here, as you do for `optimize`.
+     - candidates = the NAME of the fact holding step 6b's set -- every mandatory
+       course plus enough electives to cover `credits_needed`, and no more. Do
+       not hand-pick a few below that (a thin candidate list makes a thin plan),
+       and do not pass the whole unfinished track above it (that plans terms the
+       student does not owe). You name the collection here, as for `optimize`.
      - terms = which term(s) to plan. If the request NAMES one ("my spring plan"),
        use it. For a bare "next semester", do NOT default to summer -- a summer
        ("-3") session offers almost nothing, so planning it returns a near-empty
