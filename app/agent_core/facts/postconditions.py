@@ -22,6 +22,7 @@ loop already feeds back, because a reason a model cannot act on wastes the retry
 
 from __future__ import annotations
 
+import math
 import re
 
 from collections.abc import Sequence
@@ -318,8 +319,6 @@ def check_periods_are_whole(text: str) -> list[Violation]:
     found = _FRACTIONAL_PERIOD.findall(text or "")
     if not found:
         return []
-    import math
-
     value, unit = found[0]
     whole = math.ceil(float(value))
     return [
@@ -430,6 +429,54 @@ def check_term_within_cap(
             "the two came back under one label and a `select` on it merged them -- give each "
             "term a distinct name, and pass `max_credits` so the planner enforces the cap "
             "rather than leaving it to be noticed here.",
+        )
+    ]
+
+
+def check_plan_within_requirement(
+    planned_credits: float, remaining_required: float, cap: float
+) -> list[Violation]:
+    """A plan must not schedule so far past the requirement that it costs a term.
+
+    The gap this closes: every other check here is PER TERM. Each of them passed
+    on a plan that placed 38.5 credits toward a 25.5-credit requirement, because
+    each term inside it was legal (16, 12, 7, 3.5 against an 18 cap). Nothing
+    looked at the plan whole, so scheduling thirteen credits the student does not
+    need was invisible -- and it is not a cosmetic excess, it is what turned the
+    answer "2 semesters" into "4 semesters" on the same data, in the same hour.
+
+    The cause is the older "remaining means two different things" defect, one
+    layer further in. This student has 21 unfinished track courses worth 50.0
+    credits but needs only 25.5 more to graduate: 17.5 of mandatory, and then
+    ANY 8 credits of the 32.5 on offer. Electives are a quota, not a work list.
+    Handing the whole remaining set to the planner schedules all of it.
+
+    Deliberately tolerant, because overshoot on its own is not an error: courses
+    are indivisible, so the last one taken almost always carries the total past
+    the requirement, and a plan of 28 credits against 25.5 is simply what it
+    costs to finish. Only an overshoot big enough to CHANGE THE TERM COUNT is
+    flagged -- ceil(planned/cap) > ceil(required/cap) -- which is precisely the
+    overshoot that reaches the student as a wrong answer. A guard that fired on
+    every 2.5-credit excess would refuse correct plans, and this file has done
+    that before.
+    """
+    if cap <= 0 or remaining_required <= 0 or planned_credits <= remaining_required:
+        return []
+    needed_terms = math.ceil((remaining_required - _FLOOR_EPSILON) / cap)
+    planned_terms = math.ceil((planned_credits - _FLOOR_EPSILON) / cap)
+    if planned_terms <= needed_terms:
+        return []
+    excess = planned_credits - remaining_required
+    return [
+        Violation(
+            "plan_exceeds_requirement",
+            f"the plan schedules {planned_credits:g} credits, but only {remaining_required:g} "
+            f"remain to graduate -- {excess:g} more than the degree needs, which stretches it "
+            f"from {needed_terms} semester(s) to {planned_terms}. You are placing every "
+            "unfinished course in the track. Take all the MANDATORY ones, then add electives "
+            f"only until the total reaches {remaining_required:g}; the rest are choices this "
+            "student never has to make. Then the term count follows from the credits that "
+            "actually have to be earned.",
         )
     ]
 

@@ -113,7 +113,9 @@ SEMESTER_PLANS = SourceSchema(
                 {
                     # `order` is the slot index and `goalCredits` the slot
                     # capacity -- what `optimize` needs to place courses into
-                    # semesters.
+                    # semesters. `goalCredits` is NOT the student's cap; it is
+                    # declared in `field_notes` below, because a comment here
+                    # reaches no model.
                     "semesterCode": _I,
                     "order": _Q,
                     "goalCredits": _Q,
@@ -135,6 +137,16 @@ SEMESTER_PLANS = SourceSchema(
                     ),
                 }
             )
+        ),
+    },
+    field_notes={
+        "semesters.goalCredits": (
+            "the credit target the plan's AUTHOR typed for that semester. NOT the student's "
+            "limit -- this demo plan says 19.0 where the same student's "
+            "`student_profiles.maxCreditsPerSemester` is 18.0. Use the PROFILE's cap as the "
+            "capacity constraint when placing courses: pass this one to `optimize` instead and "
+            "it may seat 19 credits in a term, which the answer check then refuses against the "
+            "profile's 18 -- a plan rejected by this same system, with nothing saying why."
         ),
     },
     basis=Basis.OFFICIAL_RECORD,
@@ -189,6 +201,19 @@ STUDENT_PROFILES = SourceSchema(
         "catalogYear": _Q,
         "currentSemesterCode": _I,
         "maxCreditsPerSemester": _Q,
+    },
+    field_notes={
+        "maxCreditsPerSemester": (
+            "this student's own per-semester credit limit, and the ONLY cap that applies to "
+            "them -- a plan over it is refused.\n"
+            "     DERIVE \"how many semesters to graduate\" FROM IT: ceil(credits still needed / "
+            "this), rounded UP because a semester cannot be part-taken. Do NOT answer it by "
+            "counting the distinct terms a plan came back with -- that number is decided by how "
+            "many terms you ASKED the planner for, not by the data, so asking for six returns a "
+            "longer degree than asking for two. Two live runs on identical records answered "
+            "\"2 semesters\" and \"4 semesters\" that way within the same hour. Compute the "
+            "floor, then use the plan to say what goes IN those semesters."
+        ),
     },
     basis=Basis.OFFICIAL_RECORD,
     joins=(("degreeId", "degree_programs._id"),),
@@ -329,7 +354,14 @@ TRACK_COURSES = SourceSchema(
             "a course number this track LISTS -- candidates to choose among, not a set the "
             "student must complete in full. Their credits do NOT total the degree: use them to "
             "pick what to take, and `degree_programs.totalCredits` minus completed credits to say "
-            "how much is LEFT."
+            "how much is LEFT.\n"
+            "     BEFORE PLANNING, CUT THE UNFINISHED COURSES DOWN TO THAT NUMBER. Take every "
+            "`category = \"mandatory\"` one, then add electives ONLY until the running total "
+            "reaches the credits still needed, and plan those. Handing the whole unfinished set "
+            "to `plan_term` or `optimize` schedules electives the student never has to take: "
+            "here that is 50.0 credits placed against a 25.5 requirement, and it answered "
+            "\"4 semesters\" where the truth is 2. The planner places what you give it -- it "
+            "cannot know which electives are optional, because at this level they all are."
         ),
     },
     basis=Basis.WIKI_DERIVED,

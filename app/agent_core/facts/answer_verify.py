@@ -46,6 +46,7 @@ from app.agent_core.facts.postconditions import (
     check_gpa_in_range,
     check_grades_in_range,
     check_joint_floor,
+    check_plan_within_requirement,
     check_term_load,
     check_term_within_cap,
 )
@@ -71,6 +72,23 @@ _CAP_FACTS = ("max_credits_per_semester", "max_credits", "credit_cap", "maxCredi
 `max_credits_per_semester` is seeded from the profile at the start of every run,
 so the first name always resolves; the rest cover a run that recomputed it under
 its own name, the same way `_POINTS_FACTS` does."""
+
+_REQUIRED_FACTS = (
+    "credits_required", "required_credits", "total_required_credits",
+    "degree_credits", "program_credits", "totalCredits", "total_credits_required",
+)
+_COMPLETED_FACTS = (
+    "completed_credits", "credits_completed", "earned_credits", "total_credits",
+)
+_REMAINING_FACTS = (
+    "remaining_credits", "credits_remaining", "credits_to_go", "remaining_required_credits",
+)
+"""The three halves of "how much is left", kept apart on purpose.
+
+`_REMAINING_FACTS` is consulted LAST and only when the subtraction is
+unavailable -- see `_remaining_required`. A fact called `remaining_credits` has
+held the credits still to EARN in one run and the credits still on OFFER in the
+next, and they differ here by a factor of two."""
 
 _GPA_TOLERANCE = 0.5
 _FLOOR = re.compile(r"above\s+(\d+(?:\.\d+)?)")
@@ -117,6 +135,23 @@ def verify_answer(
             violations += check_term_load(group_credits, label)
             if cap is not None:
                 violations += check_term_within_cap(group_credits, cap, label)
+
+    # The plan WHOLE, against what the degree still needs. Every check above is
+    # per term and all of them pass a plan that schedules every unfinished course
+    # in the track -- each term legal, the total 13 credits past the requirement,
+    # and the answer two semesters too long.
+    #
+    # Measured on ONE collection, the largest. A multi-term answer usually slots
+    # both a per-term summary and the course-by-course listing, and they describe
+    # the same credits twice: adding them doubles the plan and would flag a
+    # correct one.
+    requirement = _remaining_required(facts)
+    if cap is not None and requirement is not None and collections:
+        planned = max(
+            sum(course.credits for course in term_courses)
+            for _name, term_courses in collections
+        )
+        violations += check_plan_within_requirement(planned, requirement, cap)
 
     standing = _standing(facts)
     if standing is not None:
@@ -186,6 +221,30 @@ def _plan_collections(
 
 def _credit_cap(facts: Mapping[str, HeldFact]) -> float | None:
     value = _scalar_fact(facts, _CAP_FACTS)
+    return value if value and value > 0 else None
+
+
+def _remaining_required(facts: Mapping[str, HeldFact]) -> float | None:
+    """Credits the student still has to EARN -- not courses they could still take.
+
+    Derived from `degree total - completed` FIRST, and only then read from a
+    fact the model named, because "remaining" is the one word in this domain
+    that reliably means two different things. For this student it is either 25.5
+    (the degree needs 155, they hold 129.5) or 50.0 (the track still lists 21
+    unfinished courses) depending which sense you take, and a run has shipped
+    each. Both totals are usually held at once, so a name lookup alone is a coin
+    flip; the subtraction is not.
+
+    Returning None SKIPS the check, which is the safe direction: an overshoot
+    that goes unflagged is the behaviour we already have, while a requirement
+    read too small would refuse correct plans -- the failure this file's history
+    is mostly made of.
+    """
+    required = _scalar_fact(facts, _REQUIRED_FACTS)
+    completed = _scalar_fact(facts, _COMPLETED_FACTS)
+    if required is not None and completed is not None and required > completed:
+        return required - completed
+    value = _scalar_fact(facts, _REMAINING_FACTS)
     return value if value and value > 0 else None
 
 
