@@ -41,14 +41,18 @@ towards 300 re-breaks this no matter what plan the project is on, because the
 request dies long before the execution limit is reached."""
 
 
-DEFAULT_TIME_BUDGET_S = 270.0
+DEFAULT_TIME_BUDGET_S = 240.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
 
-Production overrides this to 50 via TIME_BUDGET_S, and must: the binding limit
-in front of the deployment is time to FIRST BYTE, about 60 seconds, not the
-300s execution ceiling. See VERCEL_HARD_LIMIT_S. Locally there is no such
-proxy, so the default stays high enough to see how the reasoning really
-performs.
+Set against the 300s platform ceiling, with `run_loop` reserving the longest
+turn it has measured so a run also FINISHES inside the window rather than only
+starting its last turn inside it.
+
+A separate constraint was measured on 2026-08-20 and is NOT reflected here by
+choice: the network path in front of the deployment drops a request that emits
+nothing for ~60s, so a budget this size is silent past that and the request is
+cut. See VERCEL_HARD_LIMIT_S for the measurements. Running at 300s is a
+deliberate decision to prioritise reasoning depth over that proxy limit.
 
 Was 240, chosen when the loop only checked `elapsed >= budget` -- which bounds
 when a turn BEGINS, so the 60s gap below the platform limit was an implicit
