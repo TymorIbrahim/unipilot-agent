@@ -50,7 +50,7 @@ from app.agent_core.facts.postconditions import (
     check_term_load,
     check_term_within_cap,
 )
-from app.agent_core.facts.types import Collection, Scalar
+from app.agent_core.facts.types import Basis, Collection, Scalar
 
 _CREDITS_FIELD = "credits"
 _GRADE_FIELD = "min_grade"
@@ -145,13 +145,21 @@ def verify_answer(
     # both a per-term summary and the course-by-course listing, and they describe
     # the same credits twice: adding them doubles the plan and would flag a
     # correct one.
+    # SIMULATED collections only. `_plan_collections` gathers anything whose
+    # records carry `credits`, which a `course_offerings` listing does too --
+    # and against a 25.5-credit requirement that would flag an answer holding
+    # the catalog as an over-long plan. A plan is a proposal about the future
+    # and is marked simulated at the tool that built it; a record of what is on
+    # offer is not. The per-term checks above run a 40-credit range check and a
+    # cap check, both of which a listing survives, so only this one needed it.
     requirement = _remaining_required(facts)
-    if cap is not None and requirement is not None and collections:
-        planned = max(
-            sum(course.credits for course in term_courses)
-            for _name, term_courses in collections
-        )
-        violations += check_plan_within_requirement(planned, requirement, cap)
+    planned = [
+        sum(course.credits for course in term_courses)
+        for name, term_courses in collections
+        if getattr(facts[name], "basis", None) is Basis.SIMULATED
+    ]
+    if cap is not None and requirement is not None and planned:
+        violations += check_plan_within_requirement(max(planned), requirement, cap)
 
     standing = _standing(facts)
     if standing is not None:

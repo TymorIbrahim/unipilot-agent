@@ -202,3 +202,26 @@ class TestThroughVerifyAnswer:
         del facts["credits_required"]
         del facts["completed_credits"]
         assert [v.kind for v in verify_answer(_Answer(["plan"]), facts, self.QUESTION)] == []
+
+
+class TestOnlyAPlanIsJudged:
+    """`_plan_collections` gathers any collection whose records carry `credits`
+    -- a `course_offerings` listing does too. Against a 25.5-credit requirement
+    that would read the catalog as an over-long plan and refuse a correct
+    answer. A plan is a proposal about the future and is marked SIMULATED by the
+    tool that built it; a record of what is on offer is not."""
+
+    QUESTION = "How many semesters will it take me to graduate?"
+
+    def test_an_official_record_listing_is_not_a_plan(self) -> None:
+        facts = _facts(RUN_0_TERMS)
+        facts["offerings"] = HeldFact(value=_summary([20.0, 20.0, 20.0]),
+                                      basis=Basis.OFFICIAL_RECORD)
+        violations = verify_answer(_Answer(["plan", "offerings"]), facts, self.QUESTION)
+        assert [v.kind for v in violations if v.kind == "plan_exceeds_requirement"] == []
+
+    def test_the_simulated_plan_beside_it_is_still_judged(self) -> None:
+        facts = _facts(RUN_1_TERMS)
+        facts["offerings"] = HeldFact(value=_summary([20.0]), basis=Basis.OFFICIAL_RECORD)
+        violations = verify_answer(_Answer(["plan", "offerings"]), facts, self.QUESTION)
+        assert "plan_exceeds_requirement" in [v.kind for v in violations]
