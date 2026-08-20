@@ -269,15 +269,31 @@ create index if not exists prerequisite_edges_requires_idx on prerequisite_edges
 -- The `contains` edges the graph builds from a track page's wikilinks: "which
 -- courses belong to my degree", filtered by the student's `programSlug`.
 --
--- Membership ONLY, not the required/elective split -- that lives in the credit
--- breakdown table on the track's wiki page and is reached with
--- search_corpus + interpret. The edge records the link, not the section it sat
--- under, and claiming otherwise here would be a schema lie.
+-- `category` is the SECTION the link sat under: a "Semester N" heading is the
+-- required-courses listing, "Group N" / "Chain A:" are the elective groups, and
+-- the Hebrew headings mirror both.
+--
+-- It used to be membership ONLY, on the reasoning that the required/elective
+-- split "is reached with search_corpus + interpret" and that claiming it here
+-- would be a schema lie. It is not a lie -- the heading is in the page the edge
+-- was parsed from -- and leaving it out cost three to four turns of every
+-- planning question: a corpus search, two `extract_list` calls returning
+-- TRUNCATED collections, and a join to classify against them. That was the
+-- least reliable step in the run.
+--
+-- NULL where the headings do not say. Two of the three demo tracks classify
+-- completely (49/49, 39/39), one reaches 30 of 105, and it is 54% across all
+-- tracks. An absent category is visible and falls back to the wiki route; a
+-- guessed one would not.
 create table if not exists track_courses (
-    "edge"    text primary key,
-    "track"   text not null,
-    "course"  text not null
+    "edge"      text primary key,
+    "track"     text not null,
+    "course"    text not null,
+    "category"  text
 );
+
+-- For a database created before the column existed.
+alter table track_courses add column if not exists "category" text;
 
 create index if not exists track_courses_track_idx on track_courses ("track");
 

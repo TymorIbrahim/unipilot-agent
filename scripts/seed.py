@@ -54,6 +54,7 @@ from scripts.derivations import (  # noqa: E402 -- after sys.path setup
     build_corpus_artifact,
     load_wiki_pages,
     prerequisite_edge_rows,
+    track_course_categories,
     track_course_rows,
 )
 
@@ -446,7 +447,7 @@ COLUMNS: dict[str, tuple[str, ...]] = {
                           "creditsEarned", "attempt", "source"),
     "semester_plans": ("_id", "userId", "name", "plannerType", "status", "version", "semesters"),
     "prerequisite_edges": ("edge", "course", "requires", "group"),
-    "track_courses": ("edge", "track", "course"),
+    "track_courses": ("edge", "track", "course", "category"),
 }
 
 
@@ -505,7 +506,7 @@ async def seed(arguments: argparse.Namespace) -> int:
     if not wiki_root.is_dir():
         raise SystemExit(f"no wiki corpus at {wiki_root}; pass --unipilot at a checkout")
     pages = load_wiki_pages(wiki_root)
-    track_rows = track_course_rows(pages)
+    track_rows = track_course_rows(pages, track_course_categories(chunks))
     log(f"  wiki_pages={len(pages)} track_courses={len(track_rows)} "
         f"tracks={len({row['track'] for row in track_rows})}")
 

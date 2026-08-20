@@ -239,39 +239,153 @@ def load_wiki_pages(wiki_root: Path) -> dict[str, WikiPage]:
     return pages
 
 
-def track_course_rows(pages: Mapping[str, WikiPage]) -> list[dict[str, str]]:
+def track_course_rows(
+    pages: Mapping[str, WikiPage],
+    categories: "Mapping[tuple[str, str], str] | None" = None,
+) -> list[dict[str, str | None]]:
     """`track_courses` rows -- the `contains` edges of the knowledge graph.
 
     A track page linking to a course page IS the membership record: that is what
     `build_graph` turned into `relation="contains"`, and 'which courses belong to
     my degree' has always been this edge set filtered by `programSlug`.
 
-    Membership ONLY. The required/elective split lives in the credit-breakdown
-    table on the track's page and is reached with search_corpus + interpret --
-    the edge records the link, not the section it sat under.
+    Membership AND category. The category is the SECTION the link sat under:
+    "Semester 3 (20.5 credits)" is the required-courses-by-semester listing,
+    "Group 2 - ..." and "Chain B: ..." are the elective groups, and the Hebrew
+    headings mirror both.
+
+    It used to be membership only, on the reasoning that the required/elective
+    split "is reached with search_corpus + interpret". Measured, that cost three
+    to four turns of every planning question -- a corpus search, two
+    `extract_list` calls returning TRUNCATED collections, and a join to classify
+    against them -- and it was the least reliable step in the run. The section
+    heading is right there in the page being parsed, so the split is derivable
+    here for nothing.
+
+    NULL where the page's headings do not say. Two of the three demo tracks
+    classify completely (49/49 and 39/39); one reaches 30 of 105, and across all
+    tracks it is 54%. An absent category is visible and falls back to the wiki
+    route; a guessed one would not.
     """
+    categories = dict(categories or {})
     slug_to_course = {slug: page.course_code for slug, page in pages.items() if page.course_code}
 
     seen: set[str] = set()
-    rows: list[dict[str, str]] = []
+    rows: list[dict[str, str | None]] = []
     for slug, page in pages.items():
         if page.kind != "track":
             continue
-        for target_slug, _display in WIKILINK_RE.findall(page.content):
-            target = pages.get(target_slug.strip())
-            if target is None:
+        stack: list[str] = []
+        for line in page.content.splitlines():
+            heading = _HEADING.match(line)
+            if heading:
+                depth = len(heading.group(1))
+                del stack[depth - 1:]
+                stack.append(heading.group(2))
                 continue
-            course = target.course_code or slug_to_course.get(target_slug.strip())
-            if not course:
-                continue
-            edge = f"{slug}->{course}"
-            # The source was a DiGraph, which collapses a repeated edge. A track
-            # page that links the same course twice must not become two rows.
-            if edge in seen:
-                continue
-            seen.add(edge)
-            rows.append({"edge": edge, "track": slug, "course": course})
+            category = heading_category(stack)
+            for target_slug, _display in WIKILINK_RE.findall(line):
+                target = pages.get(target_slug.strip())
+                if target is None:
+                    continue
+                course = target.course_code or slug_to_course.get(target_slug.strip())
+                if not course:
+                    continue
+                edge = f"{slug}->{course}"
+                # The source was a DiGraph, which collapses a repeated edge. A
+                # track page that links the same course twice must not become two
+                # rows -- but the FIRST occurrence may be a prose mention with no
+                # category, so a later categorised one still upgrades it.
+                if edge in seen:
+                    if category and not categories.get((slug, course)):
+                        categories[(slug, course)] = category
+                        for row in rows:
+                            if row["edge"] == edge:
+                                row["category"] = category
+                                break
+                    continue
+                seen.add(edge)
+                # A course listed as required AND in an elective chain is
+                # MANDATORY: it must be taken either way, and calling it elective
+                # would let a planner drop it.
+                resolved = categories.get((slug, course)) or category
+                if category == "mandatory":
+                    resolved = "mandatory"
+                if resolved:
+                    categories[(slug, course)] = resolved
+                rows.append({
+                    "edge": edge, "track": slug, "course": course, "category": resolved,
+                })
     return rows
+
+
+_MANDATORY_HEADING = re.compile(
+    r"^\s*(required\s+courses|semester\s*\d+|מקצועות\s+חובה|סמסטר\s)", re.IGNORECASE
+)
+_ELECTIVE_HEADING = re.compile(
+    r"^\s*(faculty\s+elective|elective|group\s*\d+|chain\s*[a-z]\b"
+    r"|בחירה|קבוצה\s|שרשרת)",
+    re.IGNORECASE,
+)
+
+
+def section_category(heading: str) -> str | None:
+    """"mandatory" / "elective" / None for one heading, in either language.
+
+    Matches the page's own organisation: a track page puts its required courses
+    under "Required Courses by Semester" with a "Semester N" subheading each,
+    and its options under "Faculty Elective Requirements" with "Group N" or
+    "Chain A:" beneath. Anything else -- "Notes & Important Rules", "Program
+    Overview" -- is None rather than a guess, because a course named in prose
+    there is a reference and not membership.
+    """
+    title = (heading or "").strip().lstrip("#").strip()
+    if _MANDATORY_HEADING.match(title):
+        return "mandatory"
+    if _ELECTIVE_HEADING.match(title):
+        return "elective"
+    return None
+
+
+def heading_category(stack: "Sequence[str]") -> str | None:
+    """The category for the innermost heading that declares one.
+
+    Innermost first, so "### Semester 3" under "## Required Courses by Semester"
+    agrees with its parent, and a subheading under an elective group inherits
+    elective rather than falling through to the page title.
+    """
+    for heading in reversed(list(stack)):
+        category = section_category(heading)
+        if category is not None:
+            return category
+    return None
+
+
+_HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
+
+
+def track_course_categories(chunks: "Sequence[Mapping[str, object]]") -> dict[tuple[str, str], str]:
+    """(track slug, course number) -> category, read off corpus CHUNKS.
+
+    The corpus route, kept for callers that hold the artifact rather than the
+    markdown -- `sectionTitle` plus the course numbers found in that section is
+    the same information the heading walk produces. `track_course_rows` uses the
+    markdown directly, because the seed builds the artifact after it and
+    `--skip-wiki` may mean there is no artifact at all.
+    """
+    categories: dict[tuple[str, str], str] = {}
+    for chunk in chunks:
+        slug = str(chunk.get("slug") or "")
+        if not slug.startswith("track-"):
+            continue
+        category = section_category(str(chunk.get("sectionTitle") or ""))
+        if category is None:
+            continue
+        for code in chunk.get("courseNumbers") or ():
+            key = (slug, str(code))
+            if categories.get(key) != "mandatory":
+                categories[key] = category
+    return categories
 
 
 # ---------------------------------------------------------------------------

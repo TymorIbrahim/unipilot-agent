@@ -315,8 +315,16 @@ TRACK_COURSES = SourceSchema(
         "edge": _I,
         "track": _I,
         "course": _I,
+        "category": _I,
     },
     field_notes={
+        "category": (
+            "\"mandatory\" or \"elective\", from the section of the track page that lists the "
+            "course. USE THIS to type candidates for `plan_term` -- it is the same split you "
+            "would otherwise reconstruct with search_corpus + two extract_list calls against the "
+            "track page, which costs three or four turns and returns TRUNCATED collections. "
+            "ABSENT where the page's headings do not say; fall back to the wiki only for those."
+        ),
         "course": (
             "a course number this track LISTS -- candidates to choose among, not a set the "
             "student must complete in full. Their credits do NOT total the degree: use them to "
