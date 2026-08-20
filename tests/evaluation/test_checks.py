@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "evaluation"))
 
 from checks import (  # noqa: E402
     claims_no,
+    stated_period_count,
     claims_yes,
     denies_knowledge,
     mentions_code,
@@ -405,3 +406,85 @@ class TestEveryRealAnswerFromTheEvalRuns:
     def test_the_hypothetical_yes_does_not_affirm(self) -> None:
         """Isolated, because the prompt asks for exactly this shape."""
         assert not claims_yes("To make it yes, pass any one of 01040066, 01040166.")
+
+
+class TestCountingSemesters:
+    """Two runs, identical data, minutes apart -- "2 semesters" and "4
+    semesters" -- and both scored CORRECT, because this question's
+    `must_contain` was empty and nothing else could see a count.
+
+    Empty was the honest choice at the time: 2 is a floor, 3 is legitimate
+    slippage once offerings are applied, and a bare number cannot express that.
+    A bare number is also wrong in both directions here -- `states_number` is
+    bounded against digits, not meaning, so a required "2" is satisfied by any
+    2-credit course in the plan listing, and a forbidden "4" fails a correct
+    answer that happens to list a 4-credit course.
+    """
+
+    def test_the_leading_verdict_is_the_count(self) -> None:
+        assert stated_period_count("It will take 2 semesters to graduate.") == 2
+
+    def test_the_four_semester_run_reads_as_four(self) -> None:
+        assert stated_period_count("You will need 4 semesters to graduate.") == 4
+
+    def test_a_later_enumeration_does_not_overwrite_the_verdict(self) -> None:
+        """Answers lead with the verdict and then list the terms, and those rows
+        carry numerals of their own."""
+        answer = (
+            "It will take 2 semesters to graduate.\n\n"
+            "- term 2026-1 · credits 16 · 6 courses\n"
+            "- term 2026-2 · credits 12 · 4 courses\n"
+        )
+        assert stated_period_count(answer) == 2
+
+    def test_at_least_is_still_a_count(self) -> None:
+        assert stated_period_count("At least 2 semesters: you need 25.5 more credits.") == 2
+
+    def test_words_count_too(self) -> None:
+        assert stated_period_count("You will need two more semesters.") == 2
+
+    def test_terms_count_as_semesters(self) -> None:
+        assert stated_period_count("Three more terms should finish it.") == 3
+
+    def test_an_answer_naming_no_count_says_so(self) -> None:
+        assert stated_period_count("You still need 25.5 credits.") is None
+
+    def test_credits_are_not_mistaken_for_a_count(self) -> None:
+        assert stated_period_count("- term spring · credits 4 · 00970414") is None
+
+    RANGE = {"periods": (2, 3)}
+
+    def test_the_floor_passes(self) -> None:
+        verdict, _ = scores("It will take 2 semesters. You need 25.5 more credits.",
+                            must=(25.5,), **self.RANGE)
+        assert verdict == "correct"
+
+    def test_the_legitimate_three_passes(self) -> None:
+        """Offerings can stretch the floor, and the derivation says so."""
+        verdict, _ = scores("It will take 3 semesters. You need 25.5 more credits.",
+                            must=(25.5,), **self.RANGE)
+        assert verdict == "correct"
+
+    def test_four_is_wrong(self) -> None:
+        verdict, why = scores("You will need 4 semesters. You need 25.5 more credits.",
+                              must=(25.5,), **self.RANGE)
+        assert verdict == "wrong"
+        assert "4 semesters" in why
+
+    def test_one_is_wrong(self) -> None:
+        """Below the floor is the dangerous direction -- it under-promises the
+        work and a student would plan around it."""
+        verdict, _ = scores("You can finish in 1 semester. You need 25.5 more credits.",
+                            must=(25.5,), **self.RANGE)
+        assert verdict == "wrong"
+
+    def test_naming_no_count_is_incomplete_not_wrong(self) -> None:
+        verdict, _ = scores("You still need 25.5 credits to graduate.",
+                            must=(25.5,), **self.RANGE)
+        assert verdict == "incomplete"
+
+    def test_a_give_up_is_still_caught_first(self) -> None:
+        verdict, why = scores("I wasn't able to work that out from your records.",
+                              must=(25.5,), **self.RANGE)
+        assert verdict == "wrong"
+        assert "declined" in why

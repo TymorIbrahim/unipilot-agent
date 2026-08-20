@@ -110,6 +110,36 @@ _NEGATIVE_CLAIMS = (
 _CLAIMS_NO = re.compile("|".join(_NEGATIVE_CLAIMS), re.IGNORECASE | re.MULTILINE)
 
 
+_PERIOD_COUNT = re.compile(
+    # "2 semesters", "at least 2 semesters", "two more semesters", "2 additional terms".
+    r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight)\s+"
+    r"(?:more\s+|additional\s+|further\s+|extra\s+)?(semesters?|terms?)\b",
+    re.IGNORECASE,
+)
+_WORD_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4,
+                 "five": 5, "six": 6, "seven": 7, "eight": 8}
+
+
+def stated_period_count(text: str) -> int | None:
+    """The number of semesters an answer CLAIMS, or None if it names none.
+
+    A bare `must_contain: [2]` cannot do this job. `states_number` is bounded
+    against digits, not against meaning, so "2" matches a 2-credit course in the
+    plan listing and a wrong answer passes; "4" matches any 4-credit course and
+    a right answer fails. The question needs the count as a COUNT, so it is
+    parsed as one -- the numeral immediately qualifying "semester" or "term".
+
+    First match wins: answers lead with the verdict ("It will take 2
+    semesters...") and then enumerate terms, so a later "term 2026-2 · 4
+    courses" must not overwrite it.
+    """
+    match = _PERIOD_COUNT.search(text or "")
+    if match is None:
+        return None
+    raw = match.group(1).lower()
+    return _WORD_NUMBERS.get(raw, None) if raw in _WORD_NUMBERS else int(raw)
+
+
 def states_number(text: str, number: str | float) -> bool:
     """Whether the answer really states this number.
 
@@ -160,6 +190,7 @@ def scores(
     must: tuple = (),
     must_not: tuple = (),
     stance: str | None = None,
+    periods: tuple[int, int] | None = None,
 ) -> tuple[str, str]:
     """(verdict, why), where verdict is "correct", "incomplete" or "wrong".
 
@@ -214,6 +245,21 @@ def scores(
     if denies_knowledge(text):
         return "wrong", "declined to answer a question the data supports"
 
+    # A COUNT of periods, judged as a count. Two runs on identical data answered
+    # "2 semesters" and "4 semesters" and both scored correct, because the only
+    # bars this question had were "no fraction" and "did not give up" -- an
+    # empty `must_contain`, chosen honestly because 2 is a floor and 3 is also
+    # right. A range says that properly, where a bare number could not.
+    if periods is not None:
+        low, high = periods
+        claimed = stated_period_count(text)
+        if claimed is None:
+            return "incomplete", f"never says how many semesters (expected {low}-{high})"
+        if claimed < low:
+            return "wrong", f"claims {claimed} semesters, below the floor of {low}"
+        if claimed > high:
+            return "wrong", f"claims {claimed} semesters, more than the {high} the data supports"
+
     missing = [v for v in must if not states_number(text, v)]
     if missing:
         return "incomplete", f"right answer, but never states {', '.join(str(m) for m in missing)}"
@@ -226,5 +272,6 @@ __all__ = [
     "denies_knowledge",
     "mentions_code",
     "scores",
+    "stated_period_count",
     "states_number",
 ]
