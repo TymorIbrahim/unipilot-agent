@@ -429,3 +429,107 @@ class TestConversationHistory:
         model = _ScriptedModel({"answer": "You hold {c}."})
         await run_loop("q", model, _context(c=_coll("00940224")))
         assert "CONVERSATION SO FAR" not in model.prompts[0]
+
+
+class TestSeededFactsAreNotFetchedFacts:
+    """Seeding the profile silently disabled every out-of-scope decline.
+
+    `run_advice` opens a run by putting the student's identity and four profile
+    columns into the context -- a performance fix that deleted two turns from
+    every planning question. The decline guard, written earlier, asked whether
+    any fact other than `me` was held, and from that day the answer was always
+    yes. Asked for the weather, the agent could no longer decline: the decline
+    was refused as "you already fetched records", retried, and returned as
+    `refused`, which the route renders to the student as "I wasn't able to work
+    that out from your records with confidence."
+
+    Nothing failed loudly and no test saw it, because the tests here build their
+    context by hand and never seeded a profile. So the seeded names are now
+    PASSED IN from the one place that seeds them, and this pins the behaviour
+    against the real set.
+    """
+
+    def _seeded(self) -> dict:
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        values = {
+            "me": Scalar(ScalarKind.IDENTIFIER, "6a578a2da43a2cfe1bcc791c"),
+            "program_slug": Scalar(ScalarKind.IDENTIFIER, "track-information-systems-engineering"),
+            "catalog_year": Scalar(Q, 2025.0),
+            "current_semester": Scalar(ScalarKind.IDENTIFIER, "2025-2"),
+            "max_credits_per_semester": Scalar(Q, 18.0),
+        }
+        assert set(values) == set(SEEDED_FACT_NAMES), "the real seeded set changed"
+        return values
+
+    async def test_an_out_of_scope_question_can_still_be_declined(self) -> None:
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        model = _ScriptedModel({"decline": "I can only help with your studies, not the weather."})
+        result = await run_loop(
+            "What's the weather in Haifa?", model, _context(**self._seeded()),
+            seeded_facts=SEEDED_FACT_NAMES,
+        )
+        assert result.outcome == "declined"
+        assert result.turns == 1, "a decline must conclude at once, not spend the budget"
+
+    async def test_a_decline_after_a_real_fetch_is_still_refused(self) -> None:
+        """The other half: seeding must not make the guard toothless either."""
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        model = _ScriptedModel(
+            {"decline": "I need to derive requirements first."},
+            {"answer": "You hold {courses} courses to work from."},
+        )
+        context = _context(**self._seeded(), courses=_coll("00940224", "00960211"))
+        result = await run_loop(
+            "Plan my next two semesters.", model, context, seeded_facts=SEEDED_FACT_NAMES,
+        )
+        assert result.outcome == "answered"
+        assert any(t.action == "decline-refused" for t in result.transcript)
+
+
+class TestAnAnswerBeforeAnythingIsFetched:
+    """Two of three live `semesters_to_graduate` runs used the answer channel to
+    say they were not ready -- one on turn 1, holding nothing:
+
+        "I'm missing the curriculum and transcript facts needed to derive your
+         graduation timeline. I need to fetch your track courses first."
+
+    That is a protocol mistake, not an answer the facts failed to support, and
+    charging it to REJECTION_LIMIT spent a third of the run's tolerance for
+    genuinely unsupportable answers before the work began.
+    """
+
+    async def test_it_does_not_consume_a_rejection(self) -> None:
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        # Three premature answers -- more than REJECTION_LIMIT -- then real work.
+        premature = {"answer": "I need to fetch your records first."}
+        model = _ScriptedModel(
+            premature, premature, premature,
+            {"calls": [{"tool": "find", "as": "courses", "args": {"source": "courses"}}]},
+        )
+        context = _context(me=Scalar(ScalarKind.IDENTIFIER, "6a57"))
+        result = await run_loop(
+            "How many semesters?", model, context, seeded_facts=SEEDED_FACT_NAMES, max_turns=4,
+        )
+        assert result.outcome != "refused", "a premature answer was charged as a rejection"
+        assert sum(1 for t in result.transcript if t.action == "premature-answer") == 3
+
+    async def test_the_model_is_told_what_to_do_instead(self) -> None:
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        model = _ScriptedModel({"answer": "I need to fetch your records first."},
+                               {"answer": "Still not ready."})
+        await run_loop("q", model, _context(me=Scalar(ScalarKind.IDENTIFIER, "6a57")),
+                       seeded_facts=SEEDED_FACT_NAMES, max_turns=2)
+        assert "before fetching anything" in model.prompts[-1]
+
+    async def test_a_genuinely_ungrounded_answer_still_counts(self) -> None:
+        """Once facts ARE held, a bad answer is a rejection like any other."""
+        model = _ScriptedModel({"answer": "You have 42 courses."},
+                               {"answer": "You have 42 courses."},
+                               {"answer": "You have 42 courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.outcome == "refused"

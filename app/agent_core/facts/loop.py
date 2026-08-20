@@ -101,6 +101,7 @@ async def run_loop(
     on_progress: "Callable[[str], None] | None" = None,
     time_budget_s: float | None = None,
     history: "Sequence[Exchange]" = (),
+    seeded_facts: "frozenset[str]" = frozenset(),
 ) -> LoopResult:
     """Run until the question is answered, refused, or a budget is spent.
 
@@ -136,6 +137,20 @@ async def run_loop(
     seen_derivations: set[str] = set()
     started = time.monotonic()
     longest_turn = 0.0
+    # Facts the ROUTE seeded, as opposed to ones the model fetched. The
+    # difference decides whether a decline is honest, and it is not inferable
+    # from the context: a caller that pre-loads facts to stand for "already
+    # fetched" -- every test here does -- looks identical to one that seeded
+    # identity.
+    #
+    # The guard below used to hardcode `me`. Then `run_advice` began seeding
+    # four profile columns as well, and it silently stopped working: a weather
+    # question now "held records", so every out-of-scope decline was refused,
+    # retried, and finally returned as `refused` -- which reaches the student as
+    # "I wasn't able to work that out from your records". Nothing failed loudly,
+    # and the tests could not see it, because they never seeded a profile.
+    # Passing the set means the seeding site and this one cannot drift apart.
+    opening_facts = set(seeded_facts) & set(context.facts)
 
     for turn in range(1, max_turns + 1):
         elapsed = time.monotonic() - started
@@ -183,7 +198,7 @@ async def run_loop(
             # like a bad answer and sent back to keep working, not concluded.
             fetched = [
                 name for name, held in context.facts.items()
-                if name != "me" and not _is_empty(held.value)
+                if name not in opening_facts and not _is_empty(held.value)
             ]
             if not fetched:
                 result.outcome = "declined"
@@ -223,6 +238,27 @@ async def run_loop(
                     result.transcript.append(Turn(turn, "answer", verdict.text))
                     return result
                 verdict = Ungrounded("; ".join(problem.message for problem in problems))
+
+            # An answer attempted before ANYTHING has been fetched is not an
+            # answer the facts failed to support -- there are no facts yet. It is
+            # the model using the answer channel to say it is not ready, which
+            # two of the three live `semesters_to_graduate` runs did, one of them
+            # on turn 1: "I'm missing the curriculum and transcript facts needed
+            # to derive your graduation timeline."
+            #
+            # Charging that to REJECTION_LIMIT spent a third of the run's
+            # tolerance for genuinely unsupportable answers on a protocol
+            # mistake, and left one rejection for the real work. The turn is
+            # still gone -- that cost is real and unavoidable -- but the budget
+            # meant for "the facts do not support any phrasing" is not.
+            if not [n for n in context.facts if n not in opening_facts]:
+                result.transcript.append(Turn(turn, "premature-answer", verdict.reason))
+                observations.append(
+                    "You tried to ANSWER before fetching anything, so there was nothing to ground "
+                    "it in. Do not use the answer channel to say you are not ready -- issue the "
+                    "`find` calls you need instead, and answer once you hold the facts."
+                )
+                continue
 
             rejections += 1
             result.transcript.append(Turn(turn, "rejected", verdict.reason))

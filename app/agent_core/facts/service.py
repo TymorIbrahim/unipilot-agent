@@ -156,6 +156,7 @@ async def run_advice(
         on_progress=on_progress,
         time_budget_s=time_budget_s,
         history=history,
+        seeded_facts=SEEDED_FACT_NAMES,
     )
 
     # Record the exchange so the NEXT message can continue it. Only a real
@@ -226,6 +227,18 @@ on -- credits, grades, courses -- stays behind a tool call, so it arrives with a
 basis and a completeness the loop can reason about rather than as a fact that
 appeared from nowhere.
 """
+
+SEEDED_FACT_NAMES: frozenset[str] = frozenset(
+    {"me"} | {fact_name for _column, fact_name, _kind in _SEEDED_PROFILE_FIELDS}
+)
+"""Every fact the ROUTE puts in the context before the loop's first turn.
+
+Derived from the tuple above rather than listed again, because the last time
+these two were kept separately they drifted: `run_loop` decided whether a
+decline was honest by testing `name != "me"`, this list grew by four, and the
+agent quietly lost the ability to decline anything at all -- an out-of-scope
+question ran three turns and came back "I wasn't able to work that out from
+your records." Adding a seeded field must not be able to break that again."""
 
 
 def _seed_profile_facts(context: Any, profile: Any) -> None:
