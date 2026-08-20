@@ -21,6 +21,7 @@ import json
 import re
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -31,6 +32,7 @@ from checks import mentions_code, scores  # noqa: E402,F401 -- re-exported for p
 
 GROUND_TRUTH = HERE / "ground_truth.json"
 RESULTS = HERE / "results.json"
+TRACES = HERE / "traces"
 
 RATE_LIMIT_ATTEMPTS = 4
 COOLDOWN_S = 45.0
@@ -46,26 +48,51 @@ def score(answer: str | None, question: dict) -> tuple[str, str]:
     """
     if not answer:
         return "no-answer", "the run produced no answer at all"
+    expected = question.get("expected_periods")
     return scores(
         answer,
         must=tuple(question.get("must_contain", [])),
         must_not=tuple(question.get("must_not_contain", [])),
         stance=question.get("stance"),
+        periods=(expected["min"], expected["max"]) if expected else None,
     )
 
 
-async def run_once(prompt: str, student_id: str) -> tuple[str | None, int, float]:
+@dataclass
+class Run:
+    """One live run, kept whole.
+
+    `steps` and `error` used to be discarded at the door -- `len(result.steps)`
+    was stored and the rest dropped. That made every failure unexaminable after
+    the fact: `semesters_to_graduate` failed three times for three unknown
+    reasons, and diagnosing it meant paying for a fourth run to see what the
+    first three had already shown. The trace is the evidence; a scorer that
+    keeps only the verdict throws the evidence away.
+
+    `error` matters as much as `steps`. Every non-answer reaches the student as
+    the same sentence, so the student-facing text cannot tell a spent turn
+    budget from a stall from a refusal -- but `AgentResult.error` names the
+    outcome, and those three call for completely different fixes.
+    """
+
+    answer: str | None
+    steps: list
+    error: str | None
+    elapsed_s: float
+
+
+async def run_once(prompt: str, student_id: str) -> Run:
     from app.runner import run_agent
 
-    for attempt in range(RATE_LIMIT_ATTEMPTS):
+    for _attempt in range(RATE_LIMIT_ATTEMPTS):
         started = time.monotonic()
         result = await run_agent(prompt, student_id=student_id)
         error = str(result.error or "")
         if "RateLimit" in error or "429" in error:
             await asyncio.sleep(COOLDOWN_S)
             continue
-        return result.answer, len(result.steps), time.monotonic() - started
-    return None, 0, 0.0
+        return Run(result.answer, list(result.steps), result.error, time.monotonic() - started)
+    return Run(None, [], "rate limited on every attempt", 0.0)
 
 
 async def main() -> None:
@@ -86,15 +113,29 @@ async def main() -> None:
         print(f"{question['id']}: {question['prompt']}")
         print("=" * 74)
         for index in range(args.repeats):
-            answer, steps, elapsed = await run_once(question["prompt"], student)
-            verdict, why = score(answer, question)
+            run = await run_once(question["prompt"], student)
+            verdict, why = score(run.answer, question)
             mark = {"correct": "PASS", "incomplete": "THIN", "wrong": "FAIL",
                     "no-answer": "NONE"}[verdict]
-            print(f"  [{mark}] run {index + 1}: {steps} steps, {elapsed:.0f}s -- {why}")
-            print(f"         {(answer or '').strip()[:190]}")
+            note = f" -- {run.error}" if run.error else ""
+            print(f"  [{mark}] run {index + 1}: {len(run.steps)} steps, "
+                  f"{run.elapsed_s:.0f}s -- {why}{note}")
+            print(f"         {(run.answer or '').strip()[:190]}")
+            # The whole trace, on disk, named so a failing run can be opened
+            # without paying to reproduce it.
+            TRACES.mkdir(exist_ok=True)
+            trace = TRACES / f"{question['id']}-{index}.json"
+            trace.write_text(json.dumps({
+                "id": question["id"], "run": index, "prompt": question["prompt"],
+                "verdict": verdict, "why": why, "error": run.error,
+                "answer": run.answer, "elapsed_s": round(run.elapsed_s, 1),
+                "steps": run.steps,
+            }, ensure_ascii=False, indent=2))
             results.append({
                 "id": question["id"], "run": index, "verdict": verdict, "why": why,
-                "answer": answer, "steps": steps, "elapsed_s": round(elapsed, 1),
+                "answer": run.answer, "steps": len(run.steps),
+                "error": run.error, "elapsed_s": round(run.elapsed_s, 1),
+                "trace": str(trace.relative_to(HERE.parent)),
             })
             await asyncio.sleep(SPACING_S)
         print()

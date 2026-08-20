@@ -21,3 +21,6 @@ __pycache__/
 htmlcov/
 .DS_Store
 node_modules/
+
+# Eval traces: full prompt/response dumps, regenerable, large.
+evaluation/traces/
