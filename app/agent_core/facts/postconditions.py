@@ -477,10 +477,10 @@ def check_count_states_its_basis(text: str, remaining_required: float) -> list[V
         Violation(
             "count_without_basis",
             f"the answer says how many semesters but never states the {remaining_required:g} "
-            "credits it follows from, so the student cannot check it. Slot the credits still "
-            "needed and the per-semester cap alongside the count -- \"you need {credits} more "
-            "credits and your cap is {cap} per semester, so {semesters}\" -- rather than the "
-            "count alone.",
+            "credits it follows from, so the student cannot check it. Add a slot for the fact "
+            "holding the credits still needed, next to the count -- name YOUR fact, whatever "
+            "you called it. Do not invent a fact name to slot: if you did not derive the gap "
+            "under a name you hold, derive it first.",
         )
     ]
 

@@ -298,3 +298,12 @@ class TestACountMustShowItsWorking:
             "You need 25.5 more credits at 18 per semester, so 2 semesters.\n{plan:detail}",
         )
         assert verify_answer(answer, _facts(RUN_0_TERMS), self.QUESTION) == []
+
+    def test_the_refusal_does_not_hand_back_fake_slot_names(self) -> None:
+        """The message first read: 'you need {credits} more credits and your cap
+        is {cap} per semester, so {semesters}'. Every number in an answer must
+        be a `{fact_name}` slot, so a model copying that example writes slots for
+        three facts it does not hold, and `resolve_answer` rejects the retry for
+        naming unknown facts -- a refusal whose own advice cannot be followed."""
+        message = check_count_states_its_basis("It will take 2 semesters.", REMAINING)[0].message
+        assert "{" not in message, "the fix must not be phrased as slots the model does not hold"
