@@ -21,20 +21,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # partial honest answer scores and a timeout does not.
 VERCEL_HARD_LIMIT_S = 300.0
 """The documented ceiling for a Vercel serverless call, and what `vercel.json`
-asks for with `maxDuration: 300`.
+asks for with `maxDuration: 300`. It is not the binding constraint.
 
-MEASURED, 2026-08-19: production does not get it. Requests are cut at a hard 60s
-with no HTTP response at all -- 60.80s, 60.84s, 60.88s on three consecutive
-attempts, while a 60.4s request returned 200. `maxDuration` above 60 needs a
-paid plan; on Hobby it is silently capped.
+MEASURED 2026-08-20, and the first reading of it here was WRONG. Long requests
+were being cut at 60.79-60.88s, four consecutive times, and that was written up
+as a hard 60s execution cap from a Hobby-plan `maxDuration` override. Six
+requests then completed at 33s, 42s, 59s, 60.5s, 62s and 75.6s. There is no 60s
+execution cap.
 
-This is not academic. A cut request returns NOTHING -- not an error body, not the
-four fields `/api/execute` promises on both paths -- so every guarantee this
-codebase makes about graceful degradation depends on finishing first. Earlier the
-same endpoint served 116s and 193s requests, so the limit changed under us rather
-than always having been there."""
+What separates the two sets is not how long the request ran, it is how long it
+stayed SILENT. Every failure came from a run configured to think for up to 270s,
+emitting nothing meanwhile; every success emitted its first bytes inside ~60s
+and then took as long as it liked to transfer 145-250KB of `steps`. The binding
+limit is TIME TO FIRST BYTE, somewhere in the network path, around 60 seconds.
+
+So the budget that matters is the one that gets a response STARTED, not the one
+that fits inside 300s. Production runs a 50s budget for that reason. Raising it
+towards 300 re-breaks this no matter what plan the project is on, because the
+request dies long before the execution limit is reached."""
+
+
 DEFAULT_TIME_BUDGET_S = 270.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
+
+Production overrides this to 50 via TIME_BUDGET_S, and must: the binding limit
+in front of the deployment is time to FIRST BYTE, about 60 seconds, not the
+300s execution ceiling. See VERCEL_HARD_LIMIT_S. Locally there is no such
+proxy, so the default stays high enough to see how the reasoning really
+performs.
 
 Was 240, chosen when the loop only checked `elapsed >= budget` -- which bounds
 when a turn BEGINS, so the 60s gap below the platform limit was an implicit
