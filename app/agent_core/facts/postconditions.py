@@ -75,6 +75,12 @@ class GradedCourse:
     code: str
     credits: float
     min_grade: float | None = None
+    term: str | None = None
+    """Which term this row belongs to, when the collection spans several.
+
+    A multi-semester answer slots a SUMMARY -- one row per term with that term's
+    total -- and summing those against a per-semester cap compares the whole
+    plan to one semester's limit."""
 
 
 @dataclass(frozen=True)

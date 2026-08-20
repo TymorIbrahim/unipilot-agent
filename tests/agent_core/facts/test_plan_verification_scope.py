@@ -152,3 +152,72 @@ class TestTheTwoLoadChecksAreDifferent:
         kinds = {v.kind for v in verify_answer(
             _Answer(["winter"]), _facts([83.0]), "How many semesters?")}
         assert kinds == {"term_load", "term_over_cap"}
+
+
+class TestTheCapIsCheckedPerTermNotPerCollection:
+    """A `:detail` collection is not always ONE term.
+
+    A multi-semester answer slots a SUMMARY -- one row per term, each carrying
+    that term's total. Summing those and comparing to a per-semester cap
+    compares the whole degree plan to one semester's limit, and it refused:
+
+        "term_summary totals 38.5 credits, over this student's limit of 18"
+
+    where 38.5 was 16 + 13.5 + 9 across three terms, every one of them legal.
+    The model had already spent a rejection on an unrelated refusal, spent its
+    remaining ones here, and the run returned nothing at all -- so a check added
+    to stop a wrong answer was instead preventing a right one.
+    """
+
+    def _facts(self, rows: list[tuple[str, float, str | None]]) -> dict:
+        records = tuple(
+            Record(
+                fields={
+                    "number": Scalar(ScalarKind.IDENTIFIER, code),
+                    "credits": Scalar(Q, credits),
+                    **({"term": Scalar(ScalarKind.TEXT, term)} if term else {}),
+                },
+                basis=Basis.SIMULATED,
+            )
+            for code, credits, term in rows
+        )
+        return {
+            "plan": HeldFact(
+                value=Collection(
+                    records=records,
+                    completeness=Completeness(complete=True, total=len(records)),
+                ),
+                basis=Basis.SIMULATED,
+            ),
+            "max_credits_per_semester": HeldFact(
+                value=Scalar(Q, CAP), basis=Basis.OFFICIAL_RECORD
+            ),
+        }
+
+    def test_a_multi_term_summary_is_not_summed(self) -> None:
+        facts = self._facts([("t1", 16.0, "2026-1"), ("t2", 13.5, "2026-2"), ("t3", 9.0, "2026-3")])
+        assert not verify_answer(_Answer(["plan"]), facts, "How many semesters?")
+
+    def test_one_term_over_the_cap_is_still_caught_inside_a_summary(self) -> None:
+        facts = self._facts([("t1", 22.0, "2026-1"), ("t2", 10.0, "2026-2")])
+        kinds = [v.kind for v in verify_answer(_Answer(["plan"]), facts, "How many semesters?")]
+        assert kinds == ["term_over_cap"]
+
+    def test_the_violation_names_the_offending_term(self) -> None:
+        facts = self._facts([("t1", 22.0, "2026-1"), ("t2", 10.0, "2026-2")])
+        message = verify_answer(_Answer(["plan"]), facts, "q")[0].message
+        assert "2026-1" in message and "2026-2" not in message
+
+    def test_a_single_term_of_courses_is_unchanged(self) -> None:
+        """The shape the cap was written for: 8 courses, all one term, 23
+        credits. Grouping must not lose it."""
+        rows = [(f"009{i:05d}", c, "winter")
+                for i, c in enumerate([1.5, 2.5, 3.0, 3.5, 2.5, 3.0, 3.0, 4.0])]
+        kinds = [v.kind for v in verify_answer(_Answer(["plan"]), self._facts(rows), "q")]
+        assert kinds == ["term_over_cap"]
+
+    def test_rows_with_no_term_are_treated_as_one(self) -> None:
+        rows = [(f"009{i:05d}", c, None)
+                for i, c in enumerate([1.5, 2.5, 3.0, 3.5, 2.5, 3.0, 3.0, 4.0])]
+        kinds = [v.kind for v in verify_answer(_Answer(["plan"]), self._facts(rows), "q")]
+        assert kinds == ["term_over_cap"]

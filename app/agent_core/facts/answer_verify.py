@@ -54,6 +54,7 @@ from app.agent_core.facts.types import Collection, Scalar
 _CREDITS_FIELD = "credits"
 _GRADE_FIELD = "min_grade"
 _CODE_FIELDS = ("number", "courseNumber", "code")
+_TERM_FIELD = "term"
 # The standing the joint-floor check replays against. The model names these
 # facts freely -- the recipe suggests total_points/total_credits, but live runs
 # have used points/credits and completed_* -- so several spellings are tried,
@@ -97,16 +98,25 @@ def verify_answer(
 
     violations += list(check_grades_in_range(courses))
 
-    # Each :detail collection is one rendered term. Two checks, and they are not
-    # the same one twice: `check_term_load` is a 40-credit sanity ceiling for the
-    # `optimize` overflow, and the cap is this student's real limit, which a
-    # 23-credit term cleared without either noticing.
+    # Two checks, and they are not the same one twice: `check_term_load` is a
+    # 40-credit sanity ceiling for the `optimize` overflow, and the cap is this
+    # student's real limit, which a 23-credit term cleared without either
+    # noticing.
+    #
+    # PER TERM, not per collection. A `:detail` collection is not always one
+    # term: a multi-semester answer slots a SUMMARY, one row per term carrying
+    # that term's total. Summing those and comparing to a per-semester cap
+    # compares the whole degree plan to one semester's limit -- it refused
+    # "term_summary totals 38.5 credits, over this student's limit of 18",
+    # where 38.5 was 16 + 13.5 + 9 across three terms, each of them legal. The
+    # model spent its remaining rejections on that and the run returned nothing.
     cap = _credit_cap(facts)
     for name, term_courses in collections:
-        term_credits = sum(course.credits for course in term_courses)
-        violations += check_term_load(term_credits, name)
-        if cap is not None:
-            violations += check_term_within_cap(term_credits, cap, name)
+        for label, group in _by_term(name, term_courses):
+            group_credits = sum(course.credits for course in group)
+            violations += check_term_load(group_credits, label)
+            if cap is not None:
+                violations += check_term_within_cap(group_credits, cap, label)
 
     standing = _standing(facts)
     if standing is not None:
@@ -115,6 +125,24 @@ def verify_answer(
         if floor is not None:
             violations += check_joint_floor(standing, courses, floor)
     return violations
+
+
+def _by_term(
+    name: str, courses: "list[GradedCourse]"
+) -> "list[tuple[str, list[GradedCourse]]]":
+    """The collection split into the terms it actually describes.
+
+    Rows carrying DISTINCT term labels are a summary across terms, and each is
+    its own load. Rows sharing one label -- or carrying none -- are one term's
+    courses, which is the shape the cap was written for and the shape that
+    produced the 23-credit winter.
+    """
+    groups: dict[str, list[GradedCourse]] = {}
+    for course in courses:
+        groups.setdefault(course.term or name, []).append(course)
+    if len(groups) <= 1:
+        return [(name, courses)]
+    return [(f"{name} ({label})", group) for label, group in groups.items()]
 
 
 def _plan_collections(
@@ -148,6 +176,7 @@ def _plan_collections(
                     code=_code(record),
                     credits=credits,
                     min_grade=_number(record.fields.get(_GRADE_FIELD)),
+                    term=_text(record.fields.get(_TERM_FIELD)),
                 )
             )
         if courses:
@@ -206,6 +235,13 @@ def _number(value: object) -> float | None:
     text scalar, a collection, or an absent field."""
     if isinstance(value, Scalar) and isinstance(value.value, Number) and not isinstance(value.value, bool):
         return float(value.value)
+    return None
+
+
+def _text(value: object) -> str | None:
+    """A Scalar's value as a string, when it has one."""
+    if isinstance(value, Scalar) and value.value not in (None, ""):
+        return str(value.value)
     return None
 
 
