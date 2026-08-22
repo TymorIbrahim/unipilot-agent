@@ -67,7 +67,7 @@ one. Measured serialisation is well under a second, so the rest is transfer and
 slack."""
 
 
-DEFAULT_TIME_BUDGET_S = 45.0
+DEFAULT_TIME_BUDGET_S = 50.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
 
 Set against the REAL 60s ceiling, with `run_loop` reserving the longest turn it
@@ -83,6 +83,14 @@ logged `outcome=answered elapsed=48.2s` delivered nothing to the caller.
 That was not a depth-versus-reliability trade, though it was made as one: above
 the cap there is no depth to buy, only silence. A budget under it ships the
 grounded partial the loop already knows how to produce.
+
+50 rather than 45 because a turn costs ~15s and the difference is most of one.
+`run_loop` will not START a turn it cannot finish, so a cold request -- ~13s of
+import plus a 16s turn -- reached 29s and had no room to reserve another; the
+loop was right to stop, and there is a whole turn of usable slack between this
+and the ceiling. What is NOT negotiable is staying under it: past 60s the
+platform kills the response mid-write and the caller gets nothing at all, which
+is strictly worse than the partial a spent budget produces.
 
 `run_loop` reserves the longest turn it has actually measured before starting
 another, so this is the deadline by which the loop has RETURNED -- not merely
