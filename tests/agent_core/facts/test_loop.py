@@ -533,3 +533,45 @@ class TestAnAnswerBeforeAnythingIsFetched:
                                {"answer": "You have 42 courses."})
         result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
         assert result.outcome == "refused"
+
+
+class TestARepeatedCallThatFails:
+    """The one repetition the loop never warned about.
+
+    Asked "who teaches 00960211?" -- something the schema does not record at all
+    -- the deployed agent spent turns 6, 7 and 8 issuing the IDENTICAL
+    `interpret` call, collecting the identical defect each time, and exhausted
+    its budget having learned nothing after turn 3.
+
+    The repeat warning needed facts to report ("you already ran this and it
+    returned ..."), and a defect produces none, so the `elif outcome.facts`
+    branch skipped exactly the case where repeating is most obviously futile.
+    The per-turn defect note says what broke; it never said "you have already
+    tried precisely this".
+    """
+
+    async def test_the_second_identical_failing_call_is_named_as_a_repeat(self) -> None:
+        call = {"tool": "find", "as": "x", "args": {"source": "nope"}}
+        model = _ScriptedModel({"calls": [call]}, {"calls": [call]},
+                               {"answer": "You have {count} courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)), max_turns=3)
+        assert "already ran" in model.prompts[-1], "a failing repeat went unwarned"
+        assert "DIFFERENT route" in model.prompts[-1], "say what to do instead"
+        assert result.outcome == "answered"
+
+    async def test_the_first_failure_is_not_called_a_repeat(self) -> None:
+        model = _ScriptedModel({"calls": [{"tool": "find", "as": "x", "args": {"source": "nope"}}]},
+                               {"answer": "You have {count} courses."})
+        await run_loop("q", model, _context(count=Scalar(Q, 3.0)), max_turns=2)
+        assert "already ran" not in model.prompts[-1]
+
+    async def test_a_successful_repeat_still_reports_what_it_returned(self) -> None:
+        """The original branch must keep working -- it names the VALUE, which is
+        what lets the model use the fact instead of re-fetching it."""
+        call = {"tool": "compute",
+                "args": {"pipelines": [{"name": "n", "value": {"add": [{"value": 1}, {"value": 1}]}}]}}
+        model = _ScriptedModel({"calls": [call]}, {"calls": [call]},
+                               {"answer": "You have {count} courses."})
+        await run_loop("q", model, _context(count=Scalar(Q, 3.0)), max_turns=3)
+        assert "already ran" in model.prompts[-1]
+        assert "Repeating it cannot change the result" in model.prompts[-1]

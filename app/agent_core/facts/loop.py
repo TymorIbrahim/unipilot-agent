@@ -312,6 +312,22 @@ async def run_loop(
                     "Repeating it cannot change the result. Use what you hold: take the next "
                     "derivation step, or ANSWER with the facts you have."
                 )
+            else:
+                # A repeat that FAILED is the clearest waste of all, and it used
+                # to be the one case that went unwarned: the branch above needed
+                # facts to report, and a defect produces none. Live, asked "who
+                # teaches 00960211?" -- something the schema does not record --
+                # the loop spent turns 6, 7 and 8 issuing the identical
+                # `interpret` call, collecting the identical defect each time,
+                # and exhausted its budget without ever being told it was
+                # repeating itself. The per-turn defect note says what broke; it
+                # does not say "you have already tried exactly this".
+                observations.append(
+                    f"{DEFECT_NOTE}: you already ran {call.get('tool')}"
+                    f"({_brief(call.get('args'), 90)}) this run and it failed the same way. "
+                    "Repeating it cannot change the result. Try a DIFFERENT route, or -- if the "
+                    "data simply does not record this -- say so plainly instead of retrying."
+                )
             if outcome.proposal is not None:
                 # A proposal is TERMINAL: an action request's correct outcome is
                 # a change described for a person to approve, and once described

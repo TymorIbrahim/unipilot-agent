@@ -135,6 +135,57 @@ def check_no_group_identifiers(text: str) -> list[Violation]:
     ]
 
 
+_CLAIMED_PASS = re.compile(
+    r"\byou\s+(?:already\s+|have\s+|had\s+|previously\s+)*passed\s+(?:course\s+)?(\d{6,8})\b",
+    re.IGNORECASE,
+)
+
+
+def check_claimed_pass_is_on_the_transcript(
+    text: str, passed_codes: "Sequence[str]"
+) -> list[Violation]:
+    """Telling a student they passed a course they have not is the worst answer
+    this system can give, and every other gate passes it.
+
+    Live: "If I fail 00970800, how does that change my graduation timeline?" ->
+
+        You already passed 00970800 in 41 transcript rows, so failing it on a
+        re-take would not change your graduation timeline. A passed course does
+        not add any further credit when repeated.
+
+    00970800 is one of this student's six REMAINING mandatory courses. The
+    `find` carried no course filter, so the fact -- which the model named
+    `passed_00970800` -- held all 41 of their passed courses, and 41 is a real,
+    correctly derived number. The grounding invariant is satisfied: the digit
+    came from a fact. What is false is the sentence around it.
+
+    This is the failure `HeldFact.derivation` was added for, one step further
+    on. Showing "41 (read from passed_courses)" beside the answer lets a
+    DEVELOPER see the mistake; the student reading "you already passed 00970800"
+    cannot. So the claim is checked against the codes actually on the transcript.
+
+    Skipped when no passed-courses fact is held -- an unverifiable claim is not
+    blocked, only a contradicted one, which is the rule every check here follows.
+    """
+    if not passed_codes:
+        return []
+    known = {str(code) for code in passed_codes}
+    for match in _CLAIMED_PASS.finditer(text or ""):
+        code = match.group(1)
+        if code not in known:
+            return [
+                Violation(
+                    "unearned_pass",
+                    f"the answer says the student passed {code}, and {code} is not among the "
+                    f"{len(known)} courses on their transcript. Check the fact you are citing "
+                    "actually concerns that course: a `find` on `passed_courses` filtered only by "
+                    "userId returns EVERY course they passed, whatever you named it. Filter by "
+                    "the course number too, or say plainly that they have not taken it.",
+                )
+            ]
+    return []
+
+
 def check_no_object_identifiers(text: str) -> list[Violation]:
     """A database `_id` must never stand in for the thing it identifies.
 

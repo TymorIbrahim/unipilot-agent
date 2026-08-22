@@ -39,6 +39,7 @@ from app.agent_core.facts.postconditions import (
     Standing,
     Violation,
     check_alternatives_are_distinct,
+    check_claimed_pass_is_on_the_transcript,
     check_eligibility_is_not_self_contradictory,
     check_no_edge_identifiers,
     check_periods_are_whole,
@@ -119,6 +120,7 @@ def verify_answer(
     violations = check_no_group_identifiers(answer.text)
     violations += check_no_edge_identifiers(answer.text)
     violations += check_no_object_identifiers(answer.text)
+    violations += check_claimed_pass_is_on_the_transcript(answer.text, _passed_codes(facts))
     violations += check_alternatives_are_distinct(answer.text, question)
     violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)
@@ -343,3 +345,31 @@ def _code(record: object) -> str:
 
 
 __all__ = ["verify_answer"]
+
+
+_PASSED_SOURCES = ("passed_courses",)
+_COURSE_CODE_FIELDS = ("courseNumber", "course", "number", "code")
+
+
+def _passed_codes(facts: Mapping[str, HeldFact]) -> list[str]:
+    """Every course number the student has actually passed, per the facts held.
+
+    Read off the DERIVATION, not the fact's name. The name is prose the model
+    wrote and is exactly what went wrong: a collection of all 41 passed courses
+    was called `passed_00970800`, and the answer then described it as being
+    about 00970800. The derivation says "read from passed_courses" whatever the
+    model called it.
+    """
+    codes: list[str] = []
+    for held in facts.values():
+        derivation = str(getattr(held, "derivation", "") or "")
+        if not any(source in derivation for source in _PASSED_SOURCES):
+            continue
+        records = getattr(held.value, "records", None) or ()
+        for record in records:
+            for field in _COURSE_CODE_FIELDS:
+                scalar = record.fields.get(field)
+                if scalar is not None and scalar.value:
+                    codes.append(str(scalar.value))
+                    break
+    return codes
