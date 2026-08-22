@@ -236,10 +236,27 @@ def _cannot_determine(passage: Passage, question: str, expect: ScalarKind, *, wh
     page, received the identical answer, and burned turns doing it. A refusal
     that does not say WHICH source was read invites exactly that.
     """
+    # The page is often RIGHT and the expected KIND wrong, so the old ending --
+    # "a different source is needed" -- sent the model searching again when it
+    # already held the answer. Measured across a policy set: 27 of these, each
+    # followed by another `search_corpus` under a fresh fact name, which also
+    # slips past the repeated-derivation guard. "How many times can I retake a
+    # course?" has no number in it at all; the regulation says "no time limit".
+    alternative = {
+        ScalarKind.QUANTITY: (
+            f" If the answer is a PHRASE rather than a number -- \"no time limit\", \"twice\", "
+            f"\"until the end of week 4\" -- ask '{passage.slug}' again with expect: \"text\". "
+            "Only look elsewhere if the page does not cover the topic at all."
+        ),
+        ScalarKind.TEXT: (
+            f" If the answer really is a bare number, ask '{passage.slug}' again with expect: "
+            '"quantity".'
+        ),
+    }.get(expect, " A different source is needed.")
     return DataDefect(
         0,
         f"'{passage.slug}' does not answer {question!r} with a {expect.value}: {why}. "
-        f"Reading '{passage.slug}' again will return the same thing -- a different source is needed.",
+        f"Re-reading it for the same {expect.value} will return the same thing.{alternative}",
     )
 
 
