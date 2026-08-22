@@ -506,21 +506,39 @@ class TestAnAnswerBeforeAnythingIsFetched:
     genuinely unsupportable answers before the work began.
     """
 
-    async def test_it_does_not_consume_a_rejection(self) -> None:
+    async def test_the_first_ones_do_not_consume_a_rejection(self) -> None:
         from app.agent_core.facts.service import SEEDED_FACT_NAMES
 
-        # Three premature answers -- more than REJECTION_LIMIT -- then real work.
         premature = {"answer": "I need to fetch your records first."}
         model = _ScriptedModel(
-            premature, premature, premature,
+            premature, premature,
             {"calls": [{"tool": "find", "as": "courses", "args": {"source": "courses"}}]},
         )
         context = _context(me=Scalar(ScalarKind.IDENTIFIER, "6a57"))
         result = await run_loop(
-            "How many semesters?", model, context, seeded_facts=SEEDED_FACT_NAMES, max_turns=4,
+            "How many semesters?", model, context, seeded_facts=SEEDED_FACT_NAMES, max_turns=3,
         )
         assert result.outcome != "refused", "a premature answer was charged as a rejection"
-        assert sum(1 for t in result.transcript if t.action == "premature-answer") == 3
+        assert sum(1 for t in result.transcript if t.action == "premature-answer") == 2
+
+    async def test_endless_premature_answers_still_conclude(self) -> None:
+        """Forgiving them removed the only brake on a run that never fetches.
+
+        Asked "what can you not answer about my degree?" -- a question with
+        nothing to fetch by its nature -- the deployed loop made 35 consecutive
+        answer attempts, zero tool calls, and ran 169.6s until the clock stopped
+        it. Every attempt was premature, so none was charged, so nothing ever
+        concluded."""
+        from app.agent_core.facts.service import SEEDED_FACT_NAMES
+
+        premature = {"answer": "I am not ready yet."}
+        model = _ScriptedModel(*[premature] * 12)
+        result = await run_loop(
+            "what can you not answer?", model, _context(me=Scalar(ScalarKind.IDENTIFIER, "6a57")),
+            seeded_facts=SEEDED_FACT_NAMES, max_turns=12,
+        )
+        assert result.outcome == "refused", "the run never concluded"
+        assert result.turns <= 6, f"took {result.turns} turns to stop"
 
     async def test_the_model_is_told_what_to_do_instead(self) -> None:
         from app.agent_core.facts.service import SEEDED_FACT_NAMES

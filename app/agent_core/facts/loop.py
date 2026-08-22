@@ -62,6 +62,19 @@ runs use four to six turns.
 """
 REJECTION_LIMIT = 3
 
+_PREMATURE_ANSWER_LIMIT = 2
+"""Answer attempts made before anything is fetched that are FORGIVEN.
+
+The first one or two are a protocol mistake -- the model using the answer
+channel to say it is not ready -- and charging them to `REJECTION_LIMIT` spends
+the budget for genuinely unsupportable answers before the work begins.
+
+Past that they are the run's whole behaviour, and forgiving them removes the
+only brake: a question with nothing to fetch by its nature ("what can you not
+answer about my degree?") produced 35 consecutive answer attempts, no tool
+calls, and 169.6s of wall clock before the budget stopped it. Beyond this limit
+they count as rejections like any other answer the facts do not support."""
+
 DEFECT_NOTE = "A step failed"
 """Prefix marking an observation as a real failure rather than a nudge.
 
@@ -135,6 +148,7 @@ async def run_loop(
     observations: list[str] = []
     idle_turns = 0
     rejections = 0
+    premature = 0
     seen_derivations: set[str] = set()
     # The budget bounds the CALLER's window, which may have opened before this
     # loop did. On a cold start the process spends ~13s importing a 45MB bundle
@@ -259,7 +273,16 @@ async def run_loop(
             # mistake, and left one rejection for the real work. The turn is
             # still gone -- that cost is real and unavoidable -- but the budget
             # meant for "the facts do not support any phrasing" is not.
-            if not [n for n in context.facts if n not in opening_facts]:
+            #
+            # BOUNDED, because exempting it removed the only brake on a run that
+            # never fetches at all. Asked "what can you not answer about my
+            # degree?" -- a question with nothing to fetch by its nature -- the
+            # loop made 35 consecutive answer attempts, zero tool calls, and ran
+            # 169.6s until the clock stopped it. Every attempt was "premature",
+            # so none was ever charged, so nothing concluded.
+            premature_allowed = premature < _PREMATURE_ANSWER_LIMIT
+            if premature_allowed and not [n for n in context.facts if n not in opening_facts]:
+                premature += 1
                 result.transcript.append(Turn(turn, "premature-answer", verdict.reason))
                 observations.append(
                     "You tried to ANSWER before fetching anything, so there was nothing to ground "
