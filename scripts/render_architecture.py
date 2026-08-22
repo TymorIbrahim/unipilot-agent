@@ -268,18 +268,47 @@ def render() -> Path:
     draw.text((36, 652), "the reason", font=SMALL_F, fill=LLM_EDGE)
 
     # --- legend --------------------------------------------------------------
-    draw.rounded_rectangle((600, 754, 1340, 1296), radius=12, outline=LINE, width=1)
-    draw.text((620, 770), "HOW TO READ THE TRACE", font=TAG_F, fill=MUTED)
-    y = 800
+    # Laid out in two passes so the panel FITS ITS CONTENTS. The border used to
+    # be a hardcoded y=1296, which is fine until a module description grows: the
+    # `AnswerVerify` role gained three post-conditions and its last two lines
+    # rendered straight through the border and off the panel. A diagram
+    # generated from `MODULES` so it can never disagree with the trace should
+    # not need hand-editing when the text it reads gets longer.
+    entries = []
     for module in MODULES:
+        marker = "appears in steps" if module.calls_llm else "deterministic - no model call"
+        # The role's own closing sentence says what the tag beside the name
+        # already says. The strip was written with a HYPHEN while `modules.py`
+        # uses an em-dash, so it never matched and every deterministic module
+        # printed the redundant line -- six wasted lines across four boxes, which
+        # is most of the overflow.
+        body = module.role
+        for tail in (" Deterministic — no model call.", " Deterministic - no model call."):
+            body = body.replace(tail, "")
+        entries.append((module, marker, wrap(draw, body, BODY_F, 660)))
+
+    top = 754
+    height = 46 + sum(26 + 17 * len(lines) + 8 for _module, _marker, lines in entries)
+    if top + height > HEIGHT - 20:
+        # Fitting the panel to its text moved the failure rather than removing
+        # it: the border no longer cuts through a description, but the CANVAS
+        # still can. Loud, because the last one was silent -- the overflow only
+        # showed up by looking at the picture.
+        raise SystemExit(
+            f"the legend needs {top + height}px but the canvas is {HEIGHT}px. "
+            f"Raise HEIGHT to at least {top + height + 20}, or shorten a module role."
+        )
+    draw.rounded_rectangle((600, top, 1340, top + height), radius=12, outline=LINE, width=1)
+    draw.text((620, top + 16), "HOW TO READ THE TRACE", font=TAG_F, fill=MUTED)
+    y = top + 46
+    for module, marker, lines in entries:
         fill, edge, _ = style(module.name)
         draw.rounded_rectangle((622, y + 2, 646, y + 20), radius=5, fill=fill, outline=edge, width=2)
         draw.text((658, y), module.name, font=NAME_F, fill=INK)
-        marker = "appears in steps" if module.calls_llm else "deterministic - no model call"
         draw.text((658 + draw.textlength(module.name, font=NAME_F) + 12, y + 3), marker,
                   font=SMALL_F, fill=MUTED)
         y += 26
-        for line in wrap(draw, module.role.replace(" Deterministic - no model call.", ""), BODY_F, 660):
+        for line in lines:
             draw.text((658, y), line, font=BODY_F, fill=MUTED)
             y += 17
         y += 8
