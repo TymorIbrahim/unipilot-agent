@@ -3,19 +3,16 @@
 Established 2026-08-22 by asking the platform rather than inferring from
 response timings:
 
-    GET /v2/user               -> plan: hobby
-    GET /v13/deployments/{id}  -> functions: {"api/index.py": {"maxDuration": 300}}
-                                  lambdas[0].maxDuration: None
+    GET /api/health?sleep=100&kb=600  ->  100.5s, HTTP 200, 600KB delivered
 
-`vercel.json` asks for 300; the deployed function carries none. On Hobby a
-classic serverless function is capped at 60s, and the request is killed there
-mid-response:
+A function that only sleeps runs 100 seconds and returns, so neither duration
+nor response size is capped. Three earlier readings of this -- "60s execution
+cap", "no cap, it is time-to-first-byte", "60s because the plan is Hobby" -- were
+all inferred from how long requests happened to survive, and all were wrong.
 
-    responseStatusCode: 0 ... agent_run outcome=answered turns=5 elapsed=48.2s
-
-The function SUCCEEDED and the caller received nothing, because the ~13s cold
-start belongs to the same 60s window and the loop's clock did not start until
-after it.
+What the budget still has to respect is the 300s ceiling, and the ~13s cold
+start that belongs to the same window as the run: the loop's clock did not start
+until after it, so a run that logged `elapsed=48.2s` had already spent more.
 """
 
 from __future__ import annotations
@@ -33,11 +30,9 @@ def test_the_default_budget_fits_inside_the_ceiling() -> None:
 
 
 def test_an_oversized_configured_budget_is_clamped() -> None:
-    """Not a formality: `TIME_BUDGET_S=240` was live in production against a
-    ceiling of 60, and every question over ~45s returned an aborted connection
-    rather than an answer. The clamp is what keeps a stale env var from meaning
-    "no answer"."""
-    settings = Settings(time_budget_s=240.0)
+    """A budget above the ceiling cannot be honoured, so it must not be
+    configurable by accident."""
+    settings = Settings(time_budget_s=600.0)
 
     assert settings.effective_time_budget_s() == VERCEL_HARD_LIMIT_S - RESPONSE_RESERVE_S
     assert settings.effective_time_budget_s() < VERCEL_HARD_LIMIT_S

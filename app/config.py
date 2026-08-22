@@ -16,58 +16,57 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The ceiling this deployment ACTUALLY has: 60s, because the account is on the
-# Hobby plan. We finish well before it and ship whatever the agent has grounded
-# so far, because a partial honest answer scores and a timeout does not.
-VERCEL_HARD_LIMIT_S = 60.0
-"""The real ceiling, established 2026-08-22 from the platform rather than by
-inference.
+# Vercel's documented maximum for a serverless call, and what `vercel.json` asks
+# for. We finish well before it and ship whatever the agent has grounded so far,
+# because a partial honest answer scores and a timeout does not.
+VERCEL_HARD_LIMIT_S = 300.0
+"""The ceiling, MEASURED against the deployment rather than inferred (2026-08-22).
 
-    GET /v2/user                     -> plan: hobby
-    GET /v13/deployments/{id}        -> functions: {"api/index.py":
-                                        {"maxDuration": 300}}
-                                        lambdas[0].maxDuration: None
+    GET /api/health?sleep=100&kb=600   ->  100.5s, HTTP 200, 600KB delivered
 
-`vercel.json` asks for 300 and the deployed function carries no maxDuration at
-all: on Hobby, a classic serverless function is capped at 60s and the request is
-killed there.
+A function that only sleeps runs 100 seconds and returns. Duration is not
+capped here, and neither is response size.
 
-This file has now been wrong about it twice, in opposite directions, and both
-readings were inferences from response timings. The first called it a 60s
-execution cap; that was RIGHT. It was then overturned because six requests
-completed at 33-75.6s and one at 68.1s, and rewritten as a ~60s
-time-to-first-byte limit somewhere in the network path. Neither reading asked
-the platform.
+This constant has now been wrong twice, and both times the reasoning was the
+same mistake: inferring a platform rule from how long requests happened to
+survive.
 
-What the timings could not show, and the logs do:
+  - First reading: "a hard 60s execution cap" -- from four requests cut at
+    60.79-60.88s.
+  - Second: "no cap; the limit is time-to-first-byte" -- after six completed at
+    33-75.6s.
+  - Third: "60s, because the account is on the Hobby plan" -- from `plan: hobby`
+    plus six more deaths at 60.1-62.1s. That one even had a disproof already in
+    hand and did not use it: a 141.4s request had succeeded on this same account
+    that morning.
 
-    responseStatusCode: 0 ... agent_run outcome=answered turns=5 elapsed=48.2s
-    responseStatusCode: 0 ... agent_run outcome=answered turns=7 elapsed=36.9s
+Every reading fitted its sample. What settled it was asking the deployment a
+question with one variable in it, which is what the sleep probe is: no model, no
+database, no agent -- just duration and bytes.
 
-The function SUCCEEDS and is killed while writing the response, so the caller
-gets `RemoteProtocolError` and the platform records no status. A run that
-answers in 48s still returns nothing, because the ~13s cold start (a 45MB
-bundle and a 4,895-chunk corpus; 18.2s cold against 5.0s warm) is part of the
-same 60s and the agent never counted it. That is why the budget now starts when
-the REQUEST does -- see `main.post_execute`.
+The 60s deaths were real and remain UNEXPLAINED. They came in runs, they stopped,
+and nothing about the account or the configuration changed in between. Suspect a
+transient upstream stall (the OpenAI call, the pooler) rather than a rule, and
+before concluding a rule exists again, run the probe.
 
-Change this ONE constant to 300.0 on a paid plan and everything below follows:
-the measured 141s runs worked, and nothing else needs editing."""
+`plan: hobby` is true and is not the cause."""
 
 
-RESPONSE_RESERVE_S = 8.0
+RESPONSE_RESERVE_S = 30.0
 """Held back from the ceiling for the response itself.
 
 Serialising a full `steps` trace and getting it onto the wire is not free: a
 seven-step reply is ~390KB, because every step carries the 51KB system prompt.
 The loop governs its own turns; this covers what happens after the last one.
 
-Was 30s, which was sized against a 300s ceiling and would take half of a 60s
-one. Measured serialisation is well under a second, so the rest is transfer and
-slack."""
+Briefly 8s, while this file believed the ceiling was 60 and half of it could not
+be spared. Back to 30 now the ceiling is known to be 300: measured serialisation
+is well under a second and a 600KB body delivers fine, so this is slack rather
+than a tight allowance -- and slack is what keeps a killed response, which
+returns NOTHING, off the table."""
 
 
-DEFAULT_TIME_BUDGET_S = 50.0
+DEFAULT_TIME_BUDGET_S = 240.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
 
 Set against the REAL 60s ceiling, with `run_loop` reserving the longest turn it
@@ -84,13 +83,15 @@ That was not a depth-versus-reliability trade, though it was made as one: above
 the cap there is no depth to buy, only silence. A budget under it ships the
 grounded partial the loop already knows how to produce.
 
-50 rather than 45 because a turn costs ~15s and the difference is most of one.
-`run_loop` will not START a turn it cannot finish, so a cold request -- ~13s of
-import plus a 16s turn -- reached 29s and had no room to reserve another; the
-loop was right to stop, and there is a whole turn of usable slack between this
-and the ceiling. What is NOT negotiable is staying under it: past 60s the
-platform kills the response mid-write and the caller gets nothing at all, which
-is strictly worse than the partial a spent budget produces.
+Briefly 45, then 50, while this file believed the ceiling was 60. That cost
+seven correct answers out of eighteen -- measured, same code, ceiling the only
+variable:
+
+    budget  50s   ->  10/18 correct, 4 thin, 4 wrong
+    budget 240s   ->  17/18 correct, 0 thin, 1 wrong
+
+The hard questions need four or five turns at ~15s each, and a 50s window cannot
+hold them. There was never a reason to squeeze into one.
 
 `run_loop` reserves the longest turn it has actually measured before starting
 another, so this is the deadline by which the loop has RETURNED -- not merely
