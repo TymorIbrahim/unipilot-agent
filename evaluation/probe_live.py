@@ -151,10 +151,10 @@ async def main() -> None:
                     result = await execute(client, prompt, student)
                     faults = contract_faults(result)
                     answer = (result.get("response") or result.get("error") or "")
-                    mark = "BAD" if faults else ("err" if result.get("status") not in ("succeeded", "success") else "ok ")
+                    mark = "BAD" if faults else ("err" if result.get("status") != "ok" else "ok ")
                     print(f"    [{mark}] {result.get('elapsed_s'):>6}s  {prompt[:42]:44} "
                           f"{str(answer)[:80]}")
-                    if faults or result.get("status") not in ("succeeded", "success"):
+                    if faults or result.get("status") != "ok":
                         findings.append({"group": "students", "student": label, "prompt": prompt,
                                          "elapsed_s": result.get("elapsed_s"),
                                          "fault": faults or result.get("error"),
