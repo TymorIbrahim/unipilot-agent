@@ -84,10 +84,15 @@ class TestNoDrift:
         because a curated list would need the same maintenance the prose did.
         """
         rendered = render_catalog()
-        real = tool_names() | set(OPERATORS) | set(SUGAR)
+        # Source names come from the REGISTRY, not from a list kept by hand:
+        # adding a source and forgetting to list it here is not drift, and the
+        # curated version failed on `remaining_courses` the day it landed.
+        from app.agent_core.facts.sources import REGISTRY
+
+        real = tool_names() | set(OPERATORS) | set(SUGAR) | set(REGISTRY)
         known_vocabulary = real | {
             # wire keys and argument names, not tools
-            "search_corpus", "completed_courses", "track_requirements", "remaining_required",
+            "search_corpus", "track_requirements", "remaining_required",
             "prerequisite_edges", "past_offerings", "upcoming_semesters", "period_path",
             "cycle_path", "academic_year",
             "minimize_slots", "eligibility_check", "courseNumber", "creditsEarned",
@@ -100,7 +105,9 @@ class TestNoDrift:
             "my_courses", "policy_hits", "prereq_chain", "required_credits", "spring_forecast",
             "elective_codes", "winter_plan",
             # plan_term argument names.
-            "max_credits",
+            "max_credits", "credit_target",
+            # Facts seeded by the route before the first turn.
+            "credits_needed",
         }
         mentioned = set(re.findall(r"\b[a-z]+_[a-z_]+\b", rendered))
         unknown = mentioned - known_vocabulary

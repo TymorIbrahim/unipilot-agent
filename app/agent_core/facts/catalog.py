@@ -295,8 +295,8 @@ COMPOSITES: tuple[ToolSpec, ...] = (
         name="plan_term",
         purpose="Build a conflict-free, exam-safe schedule for one or more terms from candidate courses.",
         when=(
-            "Once you HOLD the eligible candidate courses -- the remaining courses to consider, each "
-            "tagged mandatory or elective -- call this to seat them into the actual timetable of a "
+            "Once you HOLD the eligible candidate courses -- `remaining_courses` is exactly that, "
+            "already tagged mandatory or elective -- call this to seat them into the timetable of a "
             "term. Unlike `optimize`, which places items into abstract slots, this builds the REAL "
             "weekly schedule using the university's own planner: it keeps only courses offered that "
             "term, assigns non-conflicting lecture/tutorial/lab groups, checks exam dates, respects "
@@ -327,7 +327,8 @@ COMPOSITES: tuple[ToolSpec, ...] = (
             "as": "winter_plan",
             "args": {
                 "terms": ["winter"],
-                "candidates": [{"courseNumber": "00940412", "category": "mandatory"}],
+                "candidates": "remaining_courses",
+                "credit_target": {"fact": "credits_needed"},
                 "max_credits": 20,
             },
         },

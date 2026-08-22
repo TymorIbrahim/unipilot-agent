@@ -797,11 +797,22 @@ async def _plan_term(name: str, args: Mapping[str, Any], context: DispatchContex
             ExpressionDefect(0, "'candidates' must name a held collection of courses, or be a non-empty list of {courseNumber, category}"),
         )
 
+    # `credit_target` bounds the candidate set to what the degree still needs:
+    # every mandatory course, then electives until the target. Optional, and
+    # skipped when the credits are unknown -- bounding a set whose credits are
+    # all zero would keep the mandatory courses alone and silently shorten the
+    # degree.
+    target = _resolve_number(args.get("credit_target"), context)
+    if isinstance(target, ExpressionDefect):
+        return _defect(name, target)
+    if target is not None and any(c.get("_credits") for c in candidates):
+        candidates = _bounded_by_credits(candidates, target)
+
     try:
         result = await fetch_term_plan(
             user_id=user_id,
             semester_codes=terms,
-            candidates=candidates,
+            candidates=_strip_internal(candidates),
             max_credits=_optional_number(args.get("max_credits")),
             settings=context.settings,
         )
@@ -937,10 +948,55 @@ def _candidates_from_records(records: tuple[Record, ...]) -> list[dict[str, str]
     for record in records:
         number = _field_text(record, "courseNumber")
         if number:
-            candidates.append(
-                {"courseNumber": canonical_course_code(number), "category": _record_category(record)}
-            )
+            candidate = {
+                "courseNumber": canonical_course_code(number),
+                "category": _record_category(record),
+            }
+            # Carried for `credit_target` below and stripped before the plan
+            # service sees it -- the service takes a course and a priority.
+            credits = record.fields.get("credits")
+            if isinstance(credits, Scalar) and isinstance(credits.value, (int, float)):
+                candidate["_credits"] = float(credits.value)
+            candidates.append(candidate)
     return candidates
+
+
+def _bounded_by_credits(
+    candidates: list[dict[str, Any]], target: float
+) -> list[dict[str, Any]]:
+    """Every mandatory course, then electives only until `target` is reached.
+
+    The rule the recipe spells out, applied here instead of costing a turn. It
+    is pure arithmetic over facts already held -- there is one right answer, and
+    the model was spending ~15s of a 45s budget computing it.
+
+    It is also the step most expensive to get wrong. Handing the planner the
+    WHOLE unfinished track is what produced "4 semesters" where the truth is 2:
+    50.0 credits of courses scheduled against a 25.5-credit requirement, with
+    every individual term legal, so no per-term check could see it.
+
+    Mandatory first and never dropped: those must be taken whatever the total
+    comes to, so the target bounds the ELECTIVES only. Overshooting on the last
+    elective is expected -- courses are indivisible -- which is why the answer
+    check tolerates any overshoot that does not change the term count.
+    """
+    if target <= 0:
+        return candidates
+    mandatory = [c for c in candidates if c.get("category") == "mandatory"]
+    electives = [c for c in candidates if c.get("category") != "mandatory"]
+
+    running = sum(float(c.get("_credits") or 0) for c in mandatory)
+    chosen = list(mandatory)
+    for elective in electives:
+        if running >= target:
+            break
+        chosen.append(elective)
+        running += float(elective.get("_credits") or 0)
+    return chosen
+
+
+def _strip_internal(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{k: v for k, v in c.items() if not k.startswith("_")} for c in candidates]
 
 
 def _record_category(record: Record) -> str:
@@ -1154,3 +1210,31 @@ def _term_totals(result: Mapping[str, Any]) -> "Collection | None":
         records=tuple(rows),
         completeness=Completeness(complete=True, total=len(rows)),
     )
+
+
+def _resolve_number(raw: Any, context: DispatchContext) -> Union[float, None, ExpressionDefect]:
+    """A number written directly, or the name of a held scalar fact.
+
+    `{"fact": "credits_needed"}` is the idiom every predicate value already
+    uses, and the credit gap IS a held fact -- seeded at the start of the run --
+    so requiring a typed digit here would ask the model to launder a fact into a
+    literal, which is the one thing the grounding invariant forbids.
+    """
+    if raw is None:
+        return None
+    number = _optional_number(raw)
+    if number is not None:
+        return number
+    name = _fact_name(raw)
+    if name is None:
+        return ExpressionDefect(
+            0,
+            f"expected a number or {{\"fact\": \"name\"}}, got {raw!r}.",
+        )
+    held = context.facts.get(name)
+    if held is None:
+        return ExpressionDefect(0, f"no fact named '{name}'; held: {sorted(context.facts)}")
+    value = getattr(held.value, "value", None)
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return ExpressionDefect(0, f"'{name}' is not a number, so it cannot be a credit target")
+    return float(value)
