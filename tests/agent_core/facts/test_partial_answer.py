@@ -45,7 +45,6 @@ class TestWhatItSalvages:
         ))
         assert "129.5" in advice.answer
         assert "25.5" in advice.answer
-        assert "18" in advice.answer
         assert advice.answer != _COULD_NOT_ANSWER
 
     def test_it_says_plainly_that_it_did_not_finish(self) -> None:
@@ -54,7 +53,7 @@ class TestWhatItSalvages:
         assert "finish" in advice.answer
 
     def test_a_whole_number_is_not_shown_as_a_float(self) -> None:
-        advice = to_advice(_exhausted(max_credits_per_semester=Scalar(Q, 18.0)))
+        advice = to_advice(_exhausted(credits_needed=Scalar(Q, 18.0)))
         assert "18" in advice.answer and "18.0" not in advice.answer
 
     def test_the_outcome_is_still_reported_honestly(self) -> None:
@@ -74,6 +73,7 @@ class TestWhatItRefusesToSalvage:
             program_slug=Scalar(I, "track-information-systems-engineering"),
             catalog_year=Scalar(Q, 2025.0),
             current_semester=Scalar(I, "2025-2"),
+            max_credits_per_semester=Scalar(Q, 18.0),
         ))
         assert advice.answer == _COULD_NOT_ANSWER
 
@@ -92,7 +92,7 @@ class TestWhatItRefusesToSalvage:
         """Combining is the step that ran out of time; doing it here would be
         inventing the answer the loop declined to give."""
         advice = to_advice(_exhausted(
-            credits_needed=Scalar(Q, 25.5), max_credits_per_semester=Scalar(Q, 18.0)))
+            credits_needed=Scalar(Q, 25.5), completed_credits=Scalar(Q, 129.5)))
         assert "2 semesters" not in advice.answer
         assert "semesters:" not in advice.answer.lower()
 

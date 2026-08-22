@@ -327,10 +327,19 @@ _PARTIAL_SUFFIX = (
     "Ask me for one piece at a time -- a single term's plan, or just the number of "
     "semesters -- and I can finish it."
 )
-# Facts every run seeds or trivially derives. Echoing them back is not a partial
-# answer, it is the question restated, so a partial made only of these is worse
-# than admitting nothing.
-_NOT_WORTH_REPORTING = frozenset({"me", "program_slug", "catalog_year", "current_semester"})
+def _not_worth_reporting() -> frozenset[str]:
+    """Facts the ROUTE seeded, which the run did not learn.
+
+    Echoing them back is the question restated, not a partial answer, so a
+    partial made only of these is worse than admitting nothing. Hand-listing
+    them missed `max_credits_per_semester` and a live partial came back as the
+    single line "max credits per semester: 18" -- seeded before the first turn,
+    and presented as what the run had established.
+
+    Derived from `SEEDED_FACT_NAMES` rather than repeated, for the same reason
+    that set exists: the last two copies of this list drifted apart and took the
+    decline path with them."""
+    return SEEDED_FACT_NAMES
 
 
 def _partial_from_facts(result: LoopResult) -> str | None:
@@ -355,7 +364,7 @@ def _partial_from_facts(result: LoopResult) -> str | None:
     scalars = [
         (name, held)
         for name, held in (result.facts or {}).items()
-        if name not in _NOT_WORTH_REPORTING
+        if name not in _not_worth_reporting()
         and isinstance(held.value, Scalar)
         and held.value.kind is not ScalarKind.TEXT
         and held.value.value not in (None, "")
