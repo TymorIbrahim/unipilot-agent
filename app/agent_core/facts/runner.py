@@ -40,7 +40,7 @@ from app.agent_core.facts.operators import (
     Ty,
 )
 from app.agent_core.facts.predicate import MISSING as _MISSING
-from app.agent_core.facts.predicate import Op, Path, matches
+from app.agent_core.facts.predicate import And, Comparison, Not, Op, Or, Path, matches
 from app.agent_core.facts.types import (
     Basis,
     Collection,
@@ -357,6 +357,33 @@ def _apply(
 
     if op == "select":
         kept = tuple(r for r in current.records if matches(args["predicate"], r))
+        # Filtering on a field NO record carries is not a filter that matched
+        # nothing -- it is a filter pointed at the wrong collection, and the
+        # difference is the whole answer.
+        #
+        # Live, and dangerous: asked whether two courses could be taken
+        # together, the model fetched the prerequisite edges into
+        # `edges_00960211`, then selected `requires` over `course_00960211` --
+        # the CATALOG row, which has no `requires` and no `group`. Every
+        # comparison silently failed, the met-group count came out 0, and the
+        # student was told "No -- you meet 0 prerequisite groups" for a course
+        # they are in fact eligible for. `distinct` on the same absent field is
+        # already a defect; `select` was not, and it is the one that decides
+        # eligibility.
+        #
+        # Only when NOTHING has the path. A field present on SOME records is
+        # ordinary filtering, and an empty collection legitimately matches
+        # nothing at all.
+        if not kept and current.records:
+            for path in _predicate_paths(args["predicate"]):
+                if all(_resolve(path, record) is _MISSING for record in current.records):
+                    return ExpressionDefect(
+                        index,
+                        f"'{path.dotted}' is on no record of this collection, so the filter "
+                        "could not be applied and matched nothing. That is not the same as "
+                        "'none matched' -- check you are selecting over the collection that "
+                        "carries the field.",
+                    )
         return Collection(kept, completeness), _basis_of(kept, basis)
 
     if op == "project":
@@ -898,3 +925,23 @@ def _basis_of(records: Sequence[Record], fallback: Basis) -> Basis:
 
 
 __all__ = ["Blocked", "Failed", "Outcome", "Succeeded", "run_pipelines"]
+
+
+def _predicate_paths(predicate: Any) -> "list[Path]":
+    """Every field path a predicate reads, however deeply it is nested.
+
+    Walked rather than assumed: an `and` of two comparisons is the shape the
+    eligibility check actually uses, and reading only a top-level `path` would
+    miss both of them.
+    """
+    if isinstance(predicate, Comparison):
+        paths = [predicate.path] if isinstance(predicate.path, Path) else []
+        # `{"path": ...}` on the right-hand side is a field-to-field comparison.
+        if isinstance(predicate.value, Path):
+            paths.append(predicate.value)
+        return paths
+    if isinstance(predicate, (And, Or)):
+        return [p for term in predicate.terms for p in _predicate_paths(term)]
+    if isinstance(predicate, Not):
+        return _predicate_paths(predicate.term)
+    return []
