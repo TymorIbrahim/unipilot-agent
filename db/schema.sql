@@ -369,6 +369,57 @@ left join courses c on c."_id" = cc."courseId"
 where cc."passed";
 
 -- ---------------------------------------------------------------------------
+-- remaining_courses -- the curriculum, minus what the student already holds.
+-- ---------------------------------------------------------------------------
+-- The fourth derivation moved out of the reasoning loop, for the same reason as
+-- the first three (`passed_courses`, `track_courses.category`,
+-- `prerequisite_edges`): it is deterministic, it has exactly one right answer,
+-- and the model was paying four to six turns per question to rebuild it.
+--
+-- Measured on three live planning runs, every one had this shape:
+--
+--     find x3 -> compute x2-4 -> plan_term -> compute x1-2 -> answer
+--     └──────── one right answer, no judgement ────────┘
+--
+-- At ~15s a turn that is 60-90s of plumbing around a single turn of actual
+-- planning, against a 60s platform ceiling. The planning question could not fit,
+-- and no amount of prompting makes a deterministic join cheaper than doing it in
+-- SQL.
+--
+-- A SOURCE, not a composite. It joins and filters; it does not decide anything,
+-- and it composes with `select`, `group`, `plan_term` and `optimize` exactly as
+-- `passed_courses` does. The pre-solved `generate_semester_plan(student, track)`
+-- that `optimize.py` warns against is a different thing: that one answers the
+-- question, this one supplies the facts.
+--
+-- NOT EXISTS on `courseNumber` rather than a join, because `passed_courses`
+-- LEFT JOINs the catalog and a student whose rows reference an unknown
+-- `courseId` has a NULL `courseNumber`. A NOT IN over a set containing NULL is
+-- NULL for every row -- the whole curriculum would come back "remaining" for the
+-- one demo student whose ten passed courses are all orphaned.
+--
+-- `credits` and `title` come from the catalog with a LEFT JOIN, so a curriculum
+-- entry with no catalog row still appears. It is still a course the student
+-- owes; dropping it would quietly shorten the degree.
+create or replace view remaining_courses as
+select
+    p."userId",
+    tc."course"   as "courseNumber",
+    c."title",
+    c."credits",
+    tc."category",
+    tc."track"
+from student_profiles p
+join track_courses tc on tc."track" = p."programSlug"
+left join courses c on c."courseNumber" = tc."course"
+where not exists (
+    select 1
+    from passed_courses pc
+    where pc."userId" = p."userId"
+      and pc."courseNumber" = tc."course"
+);
+
+-- ---------------------------------------------------------------------------
 -- Row-level security.
 -- ---------------------------------------------------------------------------
 -- Enabled with NO policies, on purpose. The agent connects as `postgres` through

@@ -191,26 +191,23 @@ RECIPE -- "plan my next N semester(s), with electives, min grade per course to
 hold my GPA above T". Read N (one term or two) and T (the GPA floor -- 80, 85,
 ...) FROM THE REQUEST; neither is fixed. Follow it to the END; the last step is
 the actual plan, and stopping before it answers nothing:
-  1. find profile -> only(programSlug)                         -> my track slug
-     (that same profile fact also holds `currentSemesterCode` -- the term you are
-      in now, a "YYYY-N" code -- which step 7 reads to choose which term to plan)
-  2. find track_courses where track = {fact: slug}             -> my curriculum
-  3. find courses where courseNumber in {track, field:course}  -> credits per course
-  4. find completed; find courses where _id in {completed, field:courseId}
-     then read `courseNumber` off THOSE catalog rows       -> completed course numbers
-     (do NOT project completed's `courseId` as `courseNumber` -- that just
-      relabels an ObjectId, and the step-5 difference then matches nothing and
-      silently reports every course as still remaining)
-  5. compute: remaining = (step-3 courses) difference (step-4) on courseNumber
-  6. each remaining course's TYPE is already on its `track_courses` row, in
-     `category`: "mandatory" or "elective". Carry it through step 5's difference
-     and you are done -- no wiki read, no extract_list. Where `category` is
-     EMPTY for a track, and only there, fall back to the page's two sections
-     ("Required Courses by Semester" -> required, "Faculty Elective
-     Requirements" -> elective), classifying by POSITIVE membership and keeping
-     the rest "unclassified": an extracted set is never complete, so
+  1. find remaining_courses where userId = {fact: "me"}
+       -> every course in this student's track they have not passed, ALREADY
+          carrying `title`, `credits` and `category` ("mandatory"/"elective").
+     ONE call. This replaces the whole fetch-and-difference opening -- track
+     courses, the catalog join for credits, the transcript, and the difference
+     on courseNumber. That route cost four to six turns, and it is where
+     projecting `completed.courseId` as `courseNumber` silently reported every
+     course as still remaining.
+     Your track slug and current semester are already facts you hold; you do not
+     need to fetch the profile for them.
+     Only where `category` is EMPTY (13% of rows, and whole tracks in a few
+     cases) is the wiki route still the answer: search_corpus the page's two
+     sections ("Required Courses by Semester" -> mandatory, "Faculty Elective
+     Requirements" -> elective) and classify by POSITIVE membership, keeping the
+     rest "unclassified" -- an extracted set is never complete, so
      `difference`/"not in" against it is refused.
-  6b. CUT THE SET DOWN TO WHAT THE DEGREE STILL NEEDS, before planning anything.
+  2. CUT THE SET DOWN TO WHAT THE DEGREE STILL NEEDS, before planning anything.
      A track lists more courses than the degree requires, because its electives
      are choices. Compute the gap ONCE --
        credits_needed = degree_programs.totalCredits - sum(completed_courses
@@ -222,8 +219,8 @@ the actual plan, and stopping before it answers nothing:
      credit requirement, and answered "4 semesters" where the truth is 2. The
      planner places what you give it; it cannot know which electives are
      optional, because at this level they all are.
-  7. plan_term -- the domain shortcut that BUILDS the term. Two arguments:
-     - candidates = the NAME of the fact holding step 6b's set -- every mandatory
+  3. plan_term -- the domain shortcut that BUILDS the term. Two arguments:
+     - candidates = the NAME of the fact holding step 2's set -- every mandatory
        course plus enough electives to cover `credits_needed`, and no more. Do
        not hand-pick a few below that (a thin candidate list makes a thin plan),
        and do not pass the whole unfinished track above it (that plans terms the
@@ -246,7 +243,7 @@ the actual plan, and stopping before it answers nothing:
      and THAT is the plan. Run it ALONE and see it land before building on it: this
      one call replaces the old offerings -> semi-join -> optimize -> split
      hand-wiring, so there is nothing to place or join by hand around it.
-  8. COMPLETE THE DERIVATION, then answer -- these are different acts. Keep
+  4. COMPLETE THE DERIVATION, then answer -- these are different acts. Keep
      deriving across as many replies as it takes. Do NOT write the {answer} until
      `plan_term` has produced the plan AND every fact the answer will use (gpa,
      each term's rows and credit total, plan_credits and the single needed_min) is
@@ -321,7 +318,7 @@ the actual plan, and stopping before it answers nothing:
         When gpa < T, open by saying you are BELOW the target and {needed_min} in
         each course across {plan_credits} credits is what climbs back to it (or that
         it is not reachable, if needed_min came out at 100), then the term section(s).
-The one domain shortcut is `plan_term` (step 7); everything around it -- the GPA,
+The one domain shortcut is `plan_term` (step 3); everything around it -- the GPA,
 the joint minimum, the split and the answer -- is the general tools.
 
 CHECKPOINT before you answer a plan: you must already HOLD (a) the `plan_term`
@@ -355,8 +352,8 @@ SIX MISTAKES THAT STALL A LONG DERIVATION (seen repeatedly -- avoid them):
      turn is lost. When a step is new or uncertain -- a difference on real data, an
      `extract_list` or other prose read, the `plan_term` call -- run it ALONE, SEE
      it work, THEN build on it next turn. Do NOT try to run all the recipe steps in
-     one reply: the difference that produces the remaining set (step 5) and the
-     `plan_term` call (step 7) are the two that most often need a second attempt,
+     one reply: the remaining-set fetch (step 1) and the `plan_term` call
+     (step 3) are the two that most often need a second attempt,
      so land each and confirm it before chaining the rest onto it. Batch only
      steps you are already confident in.
   3. PROJECTING A FIELD SOME RECORDS LACK. `project` fails if the field is absent

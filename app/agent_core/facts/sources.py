@@ -413,6 +413,55 @@ PASSED_COURSES = SourceSchema(
     basis=Basis.OFFICIAL_RECORD,
     joins=(("courseNumber", "courses.courseNumber"), ("courseId", "courses._id")),
 )
+
+REMAINING_COURSES = SourceSchema(
+    collection="remaining_courses",
+    key="courseNumber",
+    fields={
+        "userId": _I,
+        "courseNumber": _I,
+        "title": _T,
+        "credits": _Q,
+        "category": _I,
+        "track": _I,
+    },
+    field_notes={
+        "courseNumber": (
+            "a course in THIS student's track that they have not passed. Filter by `userId` "
+            "and this is the whole remaining curriculum, already joined to the catalog for "
+            "`title` and `credits` and already typed by `category`. START PLANNING QUESTIONS "
+            "HERE. Rebuilding it -- find track_courses, find completed, find courses, then a "
+            "difference on courseNumber -- is four to six turns and is where the courseId / "
+            "courseNumber mix-up silently reports every course as still remaining."
+        ),
+        "credits": (
+            "from the catalog. Their SUM IS NOT what the student still needs: a track lists "
+            "more courses than the degree requires, because its electives are choices. This "
+            "student has 50.0 credits of unfinished courses and needs 25.5. For how much is "
+            "LEFT use `degree_programs.totalCredits` minus completed credits; use these to "
+            "pick WHAT to take."
+        ),
+        "category": (
+            "\"mandatory\" or \"elective\". Take every mandatory one, then add electives only "
+            "until their credits reach what is still needed -- that set is what you plan. "
+            "NULL where the track page's headings do not say, on 13% of rows."
+        ),
+    },
+    basis=Basis.OFFICIAL_RECORD,
+    joins=(("courseNumber", "courses.courseNumber"),),
+)
+"""The curriculum minus the transcript, computed in SQL rather than in turns.
+
+The fourth derivation moved out of the loop, after `passed_courses`,
+`track_courses.category` and `prerequisite_edges`. Three live planning runs each
+spent four to six turns rebuilding exactly this before reaching `plan_term`, at
+~15s a turn against a 60s platform ceiling -- which is why the planning question
+could not fit inside one request.
+
+A SOURCE, not a composite: it joins and filters and decides nothing, and it
+composes with `select`, `group`, `plan_term` and `optimize` the way
+`passed_courses` does. The pre-solved `generate_semester_plan(student, track)`
+that `optimize.py` warns against answers the question; this supplies facts."""
 """The transcript filtered to what COUNTS, with course numbers already joined.
 
 A view over `completed_courses`, and the answer to a defect that appeared three
@@ -439,6 +488,7 @@ times something was sat. This view cannot answer those, by construction.
 
 REGISTRY: dict[str, SourceSchema] = {
     "passed_courses": PASSED_COURSES,
+    "remaining_courses": REMAINING_COURSES,
     "prerequisite_edges": PREREQUISITE_EDGES,
     "track_courses": TRACK_COURSES,
     "course_offerings": COURSE_OFFERINGS,
@@ -465,6 +515,7 @@ __all__ = [
     "DEGREE_PROGRAMS",
     "MOODLE_GRADES",
     "PASSED_COURSES",
+    "REMAINING_COURSES",
     "PREREQUISITE_EDGES",
     "REGISTRY",
     "SEMESTER_PLANS",
