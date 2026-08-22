@@ -540,21 +540,57 @@ rest. Enough to show a real plan's courses; short of dumping a whole catalog."""
 
 
 def _readable_field(record: Collection) -> str:
-    """The first field of a record worth showing a person.
+    """The field of a record worth showing a person.
 
-    Skips `_id` and any ObjectId-shaped value, because the old render took the
-    FIRST field regardless -- and for an offerings or courses record that is the
-    ObjectId `_id`, so `{offerings}` dumped two dozen internal keys into prose
-    and the ObjectId guard then refused the whole answer. A readable field
-    exists on every domain record (a course number, a name); prefer it.
+    PREFERRED BY NAME first, then by elimination. The old rule took the first
+    field that was not an `_id` or ObjectId-shaped, and "first" is an accident of
+    the schema: a `prerequisite_edges` record begins with `edge`, so `{prereqs}`
+    rendered `00960211->00940224, 00960211->00940226` and
+    `check_no_edge_identifiers` then refused the whole answer.
+
+    That was the single most common wasted turn across 38 measured runs -- 12 of
+    them -- and the loop cannot repair it, because the rendering is not something
+    the model chose. It slotted a fact and the renderer picked the internal key.
+
+    The preferred names are the ones a student recognises, in the order the
+    domain wants them: a prerequisite edge is interesting for what it REQUIRES,
+    everything else for its course number or title. Falling through to the old
+    elimination keeps any record shape working, now also skipping edge and group
+    ids -- the two other tokens the post-conditions refuse, and for the same
+    reason: they look like courses and are not.
     """
     scalars = [(name, v) for name, v in record.fields.items() if isinstance(v, Scalar)]
+    by_name = {name: v for name, v in scalars}
+    for preferred in _PREFERRED_READABLE:
+        value = by_name.get(preferred)
+        if value is not None and str(value.value).strip():
+            return _render_scalar(value)
+
     readable = [
         v for name, v in scalars
-        if name != "_id" and not _OBJECT_ID.fullmatch(str(v.value))
+        if name != "_id"
+        and not _OBJECT_ID.fullmatch(str(v.value))
+        and not _EDGE_ID_VALUE.fullmatch(str(v.value))
+        and not _GROUP_ID_VALUE.fullmatch(str(v.value))
     ]
     chosen = readable[0] if readable else (scalars[0][1] if scalars else None)
     return _render_scalar(chosen) if chosen is not None else ""
+
+
+_PREFERRED_READABLE = (
+    # A prerequisite edge is interesting for what it REQUIRES -- which is also
+    # exactly what `check_no_edge_identifiers` tells the model to name.
+    "requires",
+    "courseNumber",
+    "course",
+    "number",
+    "code",
+    "title",
+    "name",
+)
+
+_EDGE_ID_VALUE = re.compile(r"\d{6,8}\s*->\s*\d{6,8}")
+_GROUP_ID_VALUE = re.compile(r"\d{6,8}\.\d+")
 
 
 _DECIMALS = 2
