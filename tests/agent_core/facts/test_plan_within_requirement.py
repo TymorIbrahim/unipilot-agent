@@ -32,6 +32,8 @@ wrong number.
 
 from __future__ import annotations
 
+import pytest
+
 from app.agent_core.facts.answer import HeldFact
 from app.agent_core.facts.answer_verify import _remaining_required, verify_answer
 from app.agent_core.facts.postconditions import (
@@ -52,6 +54,7 @@ CAP = 18.0
 REQUIRED = 155.0
 COMPLETED = 129.5
 REMAINING = 25.5
+HOW_LONG = "How many semesters will it take me to graduate?"
 
 # The two live plans, as their per-term totals.
 RUN_0_TERMS = [16.0, 12.0]                # 28.0 -> answered 2
@@ -246,35 +249,36 @@ class TestACountMustShowItsWorking:
 
     def test_a_bare_count_is_refused(self) -> None:
         violations = check_count_states_its_basis(
-            "It will take you 2 semesters to graduate.", REMAINING
+            "It will take you 2 semesters to graduate.", REMAINING, HOW_LONG
         )
         assert [v.kind for v in violations] == ["count_without_basis"]
 
     def test_a_count_with_its_credits_passes(self) -> None:
         assert check_count_states_its_basis(
-            "You need 25.5 more credits at 18 per semester, so 2 semesters.", REMAINING
+            "You need 25.5 more credits at 18 per semester, so 2 semesters.", REMAINING,
+            HOW_LONG,
         ) == []
 
     def test_an_answer_with_no_count_is_untouched(self) -> None:
         """Only a COUNT needs this basis; an ordinary term plan says nothing
         about how long the degree takes."""
         assert check_count_states_its_basis(
-            "Winter — 16 credits: 00940704, 00960578.", REMAINING
+            "Winter — 16 credits: 00940704, 00960578.", REMAINING, HOW_LONG
         ) == []
 
     def test_a_word_count_is_still_a_count(self) -> None:
-        violations = check_count_states_its_basis("You need two more semesters.", REMAINING)
+        violations = check_count_states_its_basis("You need two more semesters.", REMAINING, HOW_LONG)
         assert [v.kind for v in violations] == ["count_without_basis"]
 
     def test_a_near_miss_number_does_not_satisfy_it(self) -> None:
         """155 must not pass as 25.5, and 5 must not pass as 25.5."""
         violations = check_count_states_its_basis(
-            "Across 2 semesters you have 155 credits in the degree.", REMAINING
+            "Across 2 semesters you have 155 credits in the degree.", REMAINING, HOW_LONG
         )
         assert [v.kind for v in violations] == ["count_without_basis"]
 
     def test_no_requirement_held_means_no_demand(self) -> None:
-        assert check_count_states_its_basis("It will take 2 semesters.", 0.0) == []
+        assert check_count_states_its_basis("It will take 2 semesters.", 0.0, HOW_LONG) == []
 
     def test_it_runs_on_an_answer_holding_no_plan(self) -> None:
         """The count needs its credits whether or not a plan is slotted beside
@@ -305,7 +309,7 @@ class TestACountMustShowItsWorking:
         be a `{fact_name}` slot, so a model copying that example writes slots for
         three facts it does not hold, and `resolve_answer` rejects the retry for
         naming unknown facts -- a refusal whose own advice cannot be followed."""
-        message = check_count_states_its_basis("It will take 2 semesters.", REMAINING)[0].message
+        message = check_count_states_its_basis("It will take 2 semesters.", REMAINING, HOW_LONG)[0].message
         assert "{" not in message, "the fix must not be phrased as slots the model does not hold"
 
 
@@ -351,3 +355,59 @@ class TestTheNamesCameFromTraces:
             "credits_needed": HeldFact(value=Scalar(Q, 50.0), basis=Basis.SIMULATED),
         }
         assert _remaining_required(facts) == REMAINING
+
+
+class TestItOnlyFiresOnTheQuestionItWasWrittenFor:
+    """It was refusing correct POLICY answers.
+
+    The regulations are full of counted semesters -- "the two semesters
+    immediately following", "by the end of the 4th semester", "from semester 13
+    for a 4-year degree" -- and this check demanded that every one of them be
+    accompanied by the student's 25.5-credit gap, which had nothing to do with
+    what was asked. Three policy questions out of ten were refused that way and
+    returned no answer at all.
+
+    It became always-armed when the credit standing started being seeded: before
+    that, a question that never fetched credits had no `remaining_required`, and
+    the absence was doing the gating by accident. Two changes, each right on its
+    own, whose combination was not.
+    """
+
+    POLICY = [
+        ("Yes, but only within the two semesters immediately following the passing grade.",
+         "Can I retake a course I already passed to improve the grade?"),
+        ("English must be completed by the end of the 4th semester.",
+         "Is there a deadline for finishing my English requirement, and have I met it?"),
+        ("You are non-regular if you study 2 years beyond the standard duration, "
+         "from semester 13 for a 4-year degree.",
+         "Give me every reason I might be in non-regular academic standing."),
+        ("Physical education is 2 credits, at most 1.5 credits per semester.",
+         "Do I have to take physical education?"),
+    ]
+
+    @pytest.mark.parametrize("answer,question", POLICY)
+    def test_a_policy_answer_quoting_semesters_is_not_refused(
+        self, answer: str, question: str
+    ) -> None:
+        assert check_count_states_its_basis(answer, REMAINING, question) == []
+
+    TIMELINE = [
+        "How many semesters will it take me to graduate?",
+        "How long until I graduate?",
+        "How many semesters will it take me to graduate, and what should I take each semester?",
+    ]
+
+    @pytest.mark.parametrize("question", TIMELINE)
+    def test_the_timeline_question_is_still_checked(self, question: str) -> None:
+        violations = check_count_states_its_basis(
+            "It will take you 2 semesters to graduate.", REMAINING, question)
+        assert [v.kind for v in violations] == ["count_without_basis"]
+
+    def test_the_timeline_answer_with_its_credits_still_ships(self) -> None:
+        assert check_count_states_its_basis(
+            "You need 25.5 more credits at 18 per semester, so 2 semesters.",
+            REMAINING, self.TIMELINE[0]) == []
+
+    def test_no_question_means_no_opinion(self) -> None:
+        """An unverifiable case ships, as every check here does."""
+        assert check_count_states_its_basis("It will take 2 semesters.", REMAINING, "") == []

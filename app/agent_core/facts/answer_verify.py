@@ -132,7 +132,7 @@ def verify_answer(
     # collection beside it.
     requirement = _remaining_required(facts)
     if requirement is not None:
-        violations += check_count_states_its_basis(answer.text, requirement)
+        violations += check_count_states_its_basis(answer.text, requirement, question)
 
     collections = list(_plan_collections(answer, facts))
     courses = [course for _, term_courses in collections for course in term_courses]

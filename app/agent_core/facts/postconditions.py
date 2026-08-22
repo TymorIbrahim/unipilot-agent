@@ -573,7 +573,19 @@ def _states(text: str, number: float) -> bool:
     return re.search(rf"(?<![\d.]){re.escape(needle)}(?!\d)(?!\.\d)", text or "") is not None
 
 
-def check_count_states_its_basis(text: str, remaining_required: float) -> list[Violation]:
+_ASKS_HOW_LONG = re.compile(
+    r"how (?:many|long)\b.{0,40}\b(?:semester|term|year)s?\b"
+    r"|\bhow long\b.{0,40}\b(?:graduat|finish|degree|left)"
+    r"|\b(?:when|by when)\b.{0,30}\bgraduat"
+    r"|\b(?:semesters?|terms?)\b.{0,20}\b(?:to|until|left|remain).{0,20}\bgraduat"
+    r"|\bgraduat\w*\b.{0,40}\bhow (?:many|long)\b",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def check_count_states_its_basis(
+    text: str, remaining_required: float, question: str = ""
+) -> list[Violation]:
     """A count of semesters must carry the credits it was derived from.
 
     Three live runs answered "It will take you 2 semesters to graduate", then
@@ -592,6 +604,18 @@ def check_count_states_its_basis(text: str, remaining_required: float) -> list[V
     this project has taken, and the credits are what separate a derivation from
     a coincidence.
     """
+    # Only when the QUESTION asks how long the student has left. Without that
+    # gate this fired on any answer quoting a rule that mentions a number of
+    # semesters -- and the regulations are full of them: "the two semesters
+    # immediately following", "by the end of the 4th semester", "from semester
+    # 13". Three policy questions were refused for not stating a 25.5-credit gap
+    # that had nothing to do with what they asked.
+    #
+    # It became always-armed when the credit standing started being seeded:
+    # `remaining_required` used to be absent on a question that never fetched
+    # credits, which had been doing the gating by accident.
+    if not _ASKS_HOW_LONG.search(question or ""):
+        return []
     if remaining_required <= 0 or not _PERIOD_COUNT.search(text or ""):
         return []
     if _states(text, remaining_required):
