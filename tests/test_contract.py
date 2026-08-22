@@ -40,8 +40,10 @@ def stub_agent(monkeypatch: pytest.MonkeyPatch):
     """
     import app.runner
 
-    async def _fake(prompt: str, *, student_id: str | None = None, conversation_id: str | None = None):
-        _fake.seen = {"prompt": prompt, "student_id": student_id, "conversation_id": conversation_id}
+    async def _fake(prompt: str, *, student_id: str | None = None,
+                    conversation_id: str | None = None, started_at: float | None = None):
+        _fake.seen = {"prompt": prompt, "student_id": student_id,
+                      "conversation_id": conversation_id, "started_at": started_at}
         return app.runner.AgentResult(
             ok=True, answer="stubbed", error=None, steps=[]
         )
@@ -245,3 +247,40 @@ def test_credentials_never_appear_in_a_settings_repr() -> None:
 
     assert "sk-secret" not in rendered
     assert "pc-secret" not in rendered
+
+
+def test_execute_hands_the_core_the_windows_true_start(client, stub_agent) -> None:
+    """The budget must bound the REQUEST, not just the reasoning.
+
+    On a cold start the process spends ~13s importing a 45MB bundle and a
+    4,895-chunk corpus before the handler runs -- measured at 18.2s cold against
+    5.0s warm for the same two-step question. The loop used to start its clock
+    when the loop started, so it planned against 240s while the caller was
+    already 13 seconds into a 60s ceiling. A live run logged
+    `outcome=answered elapsed=48.2s` and the caller still received nothing:
+    13 + 48 crossed the cap while the response was being written, and the whole
+    run was discarded at the last moment.
+    """
+    response = client.post("/api/execute", json={"prompt": "hi"})
+    assert response.status_code == 200
+    assert stub_agent.seen["started_at"] is not None, (
+        "the route must tell the core when the caller's window opened"
+    )
+
+
+def test_the_first_request_is_charged_for_the_import(client, stub_agent) -> None:
+    """The cold-start cost belongs to whoever pays it.
+
+    The first request in a process is still inside the import; later ones are
+    not, because for them the import happened in someone else's window.
+    """
+    import app.main
+
+    app.main._SERVED_A_REQUEST = False
+    client.post("/api/execute", json={"prompt": "first"})
+    first = stub_agent.seen["started_at"]
+    client.post("/api/execute", json={"prompt": "second"})
+    second = stub_agent.seen["started_at"]
+
+    assert first == app.main._IMPORTED_AT, "a cold request's window opens at import"
+    assert second > first, "a warm request's window opens when it arrives"

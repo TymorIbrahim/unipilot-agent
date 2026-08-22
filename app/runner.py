@@ -49,7 +49,11 @@ class AgentResult:
 
 
 async def run_agent(
-    prompt: str, *, student_id: str | None = None, conversation_id: str | None = None
+    prompt: str,
+    *,
+    student_id: str | None = None,
+    conversation_id: str | None = None,
+    started_at: float | None = None,
 ) -> AgentResult:
     """Run one request end to end and return its answer plus its full trace."""
     from app.agent_core.facts.service import run_advice, to_advice
@@ -83,7 +87,10 @@ async def run_agent(
     # client as Interpreter / ListInterpreter at its own call sites.
     traced = TracedChat(chat, recorder, REASONING_LOOP)
 
-    started = time.monotonic()
+    # The caller's window may have opened before this function was entered --
+    # on a cold start the process was still importing. `started_at` carries
+    # that origin so the budget bounds the REQUEST, not just the reasoning.
+    started = started_at if started_at is not None else time.monotonic()
     try:
         result = await run_advice(
             question,
@@ -92,6 +99,7 @@ async def run_agent(
             time_budget_s=settings.effective_time_budget_s(),
             chat=traced,
             conversation_id=conversation_id,
+            started_at=started,
         )
     except Exception as error:  # noqa: BLE001 -- reported, never raised past here
         # The steps recorded BEFORE the failure are kept. A trace that stops

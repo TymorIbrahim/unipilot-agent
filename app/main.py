@@ -14,6 +14,7 @@ same four fields, with the cause in `error`.
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,23 @@ from app.config import get_settings
 from app.team import team_info
 
 logger = logging.getLogger(__name__)
+
+_IMPORTED_AT = time.monotonic()
+_SERVED_A_REQUEST = False
+"""When this process began, and whether it has answered anything yet.
+
+The platform's clock starts when the REQUEST arrives, which on a cold start is
+before this module finishes importing -- a 45MB bundle and a 4,895-chunk wiki
+corpus, measured at ~13s (18.2s cold against 5.0s warm for the same question).
+The loop's own budget used to start when the loop started, so it planned against
+240s of a 300s ceiling while the caller was already 13 seconds into a 60s one.
+
+Measured: the function LOGGED `outcome=answered elapsed=48.2s` and the caller
+still got nothing, because 13 + 48 crossed the cap while the response was being
+written. The work was done and thrown away.
+
+So the first request in a process is charged for the import; later ones are not,
+because for them the import already happened in someone else's window."""
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 ARCHITECTURE_PNG = _REPO_ROOT / "data" / "architecture.png"
@@ -87,6 +105,12 @@ async def get_model_architecture() -> Any:
 
 @router.post("/execute")
 async def post_execute(payload: ExecuteRequest) -> dict[str, Any]:
+    global _SERVED_A_REQUEST
+    # A cold process is still paying for its import when the request arrives, so
+    # the window opened at `_IMPORTED_AT`; a warm one starts here.
+    started_at = _IMPORTED_AT if not _SERVED_A_REQUEST else time.monotonic()
+    _SERVED_A_REQUEST = True
+
     settings = get_settings()
     if not settings.llm_configured():
         return _execute_response(
@@ -103,6 +127,7 @@ async def post_execute(payload: ExecuteRequest) -> dict[str, Any]:
             payload.prompt,
             student_id=payload.student_id,
             conversation_id=payload.conversation_id,
+            started_at=started_at,
         )
     except Exception as error:  # noqa: BLE001 -- see module docstring
         logger.exception("execute_failed")

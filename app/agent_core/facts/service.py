@@ -72,6 +72,7 @@ async def run_advice(
     time_budget_s: float | None = None,
     conversation_id: str | None = None,
     chat: Any | None = None,
+    started_at: float | None = None,
 ) -> LoopResult:
     """Run the fact loop for one student's question.
 
@@ -157,6 +158,7 @@ async def run_advice(
         time_budget_s=time_budget_s,
         history=history,
         seeded_facts=SEEDED_FACT_NAMES,
+        started_at=started_at,
     )
 
     # Record the exchange so the NEXT message can continue it. Only a real

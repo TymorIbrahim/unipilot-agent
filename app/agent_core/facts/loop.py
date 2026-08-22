@@ -102,6 +102,7 @@ async def run_loop(
     time_budget_s: float | None = None,
     history: "Sequence[Exchange]" = (),
     seeded_facts: "frozenset[str]" = frozenset(),
+    started_at: float | None = None,
 ) -> LoopResult:
     """Run until the question is answered, refused, or a budget is spent.
 
@@ -135,7 +136,13 @@ async def run_loop(
     idle_turns = 0
     rejections = 0
     seen_derivations: set[str] = set()
-    started = time.monotonic()
+    # The budget bounds the CALLER's window, which may have opened before this
+    # loop did. On a cold start the process spends ~13s importing a 45MB bundle
+    # and a 4,895-chunk corpus before any of this runs, and measuring from here
+    # simply does not see it: a live run logged `outcome=answered elapsed=48.2s`
+    # and the caller still got nothing, because 13 + 48 crossed the platform cap
+    # while the response was being written.
+    started = started_at if started_at is not None else time.monotonic()
     longest_turn = 0.0
     # Facts the ROUTE seeded, as opposed to ones the model fetched. The
     # difference decides whether a decline is honest, and it is not inferable

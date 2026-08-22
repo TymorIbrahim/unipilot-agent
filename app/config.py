@@ -16,54 +16,77 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The spec's hard ceiling: Vercel kills any function call at 300s. We finish
-# well before it and ship whatever the agent has grounded so far, because a
-# partial honest answer scores and a timeout does not.
-VERCEL_HARD_LIMIT_S = 300.0
-"""The documented ceiling for a Vercel serverless call, and what `vercel.json`
-asks for with `maxDuration: 300`. It is not the binding constraint.
+# The ceiling this deployment ACTUALLY has: 60s, because the account is on the
+# Hobby plan. We finish well before it and ship whatever the agent has grounded
+# so far, because a partial honest answer scores and a timeout does not.
+VERCEL_HARD_LIMIT_S = 60.0
+"""The real ceiling, established 2026-08-22 from the platform rather than by
+inference.
 
-MEASURED 2026-08-20, and the first reading of it here was WRONG. Long requests
-were being cut at 60.79-60.88s, four consecutive times, and that was written up
-as a hard 60s execution cap from a Hobby-plan `maxDuration` override. Six
-requests then completed at 33s, 42s, 59s, 60.5s, 62s and 75.6s. There is no 60s
-execution cap.
+    GET /v2/user                     -> plan: hobby
+    GET /v13/deployments/{id}        -> functions: {"api/index.py":
+                                        {"maxDuration": 300}}
+                                        lambdas[0].maxDuration: None
 
-What separates the two sets is not how long the request ran, it is how long it
-stayed SILENT. Every failure came from a run configured to think for up to 270s,
-emitting nothing meanwhile; every success emitted its first bytes inside ~60s
-and then took as long as it liked to transfer 145-250KB of `steps`. The binding
-limit is TIME TO FIRST BYTE, somewhere in the network path, around 60 seconds.
+`vercel.json` asks for 300 and the deployed function carries no maxDuration at
+all: on Hobby, a classic serverless function is capped at 60s and the request is
+killed there.
 
-So the budget that matters is the one that gets a response STARTED, not the one
-that fits inside 300s. Production runs a 50s budget for that reason. Raising it
-towards 300 re-breaks this no matter what plan the project is on, because the
-request dies long before the execution limit is reached."""
+This file has now been wrong about it twice, in opposite directions, and both
+readings were inferences from response timings. The first called it a 60s
+execution cap; that was RIGHT. It was then overturned because six requests
+completed at 33-75.6s and one at 68.1s, and rewritten as a ~60s
+time-to-first-byte limit somewhere in the network path. Neither reading asked
+the platform.
+
+What the timings could not show, and the logs do:
+
+    responseStatusCode: 0 ... agent_run outcome=answered turns=5 elapsed=48.2s
+    responseStatusCode: 0 ... agent_run outcome=answered turns=7 elapsed=36.9s
+
+The function SUCCEEDS and is killed while writing the response, so the caller
+gets `RemoteProtocolError` and the platform records no status. A run that
+answers in 48s still returns nothing, because the ~13s cold start (a 45MB
+bundle and a 4,895-chunk corpus; 18.2s cold against 5.0s warm) is part of the
+same 60s and the agent never counted it. That is why the budget now starts when
+the REQUEST does -- see `main.post_execute`.
+
+Change this ONE constant to 300.0 on a paid plan and everything below follows:
+the measured 141s runs worked, and nothing else needs editing."""
 
 
-DEFAULT_TIME_BUDGET_S = 240.0
+RESPONSE_RESERVE_S = 8.0
+"""Held back from the ceiling for the response itself.
+
+Serialising a full `steps` trace and getting it onto the wire is not free: a
+seven-step reply is ~390KB, because every step carries the 51KB system prompt.
+The loop governs its own turns; this covers what happens after the last one.
+
+Was 30s, which was sized against a 300s ceiling and would take half of a 60s
+one. Measured serialisation is well under a second, so the rest is transfer and
+slack."""
+
+
+DEFAULT_TIME_BUDGET_S = 45.0
 """The wall clock by which the loop must have RETURNED, not started its last turn.
 
-Set against the 300s platform ceiling, with `run_loop` reserving the longest
-turn it has measured so a run also FINISHES inside the window rather than only
-starting its last turn inside it.
+Set against the REAL 60s ceiling, with `run_loop` reserving the longest turn it
+has measured so a run also FINISHES inside the window rather than only starting
+its last turn inside it.
 
-A separate constraint was measured on 2026-08-20 and is NOT reflected here by
-choice: the network path in front of the deployment drops a request that emits
-nothing for ~60s, so a budget this size is silent past that and the request is
-cut. See VERCEL_HARD_LIMIT_S for the measurements. Running at 300s is a
-deliberate decision to prioritise reasoning depth over that proxy limit.
+Was 240, chosen against a 300s ceiling that this deployment does not have. At
+that value every question needing more than ~45s returned NOTHING -- not a
+partial answer, not an error, an aborted connection -- because the platform
+killed the invocation while the response was being written. Measured: a run that
+logged `outcome=answered elapsed=48.2s` delivered nothing to the caller.
 
-Was 240, chosen when the loop only checked `elapsed >= budget` -- which bounds
-when a turn BEGINS, so the 60s gap below the platform limit was an implicit
-allowance for it to finish. `run_loop` now reserves the longest turn it has
-actually measured, making that allowance explicit and evidence-based, and
-keeping 240 as well subtracted the margin twice: a live run stopped at 186s of
-240 with a 55s reserve, giving up on a question it would have answered by 260 --
-comfortably inside the platform's 300.
+That was not a depth-versus-reliability trade, though it was made as one: above
+the cap there is no depth to buy, only silence. A budget under it ships the
+grounded partial the loop already knows how to produce.
 
-So this is the real deadline now, and the reserve is what keeps a turn from
-crossing it."""
+`run_loop` reserves the longest turn it has actually measured before starting
+another, so this is the deadline by which the loop has RETURNED -- not merely
+the last moment it may begin a turn."""
 
 
 LLMOD_HOST = "api.llmod.ai"
@@ -178,15 +201,16 @@ class Settings(BaseSettings):
     def effective_time_budget_s(self) -> float:
         """Never allow a configured budget to exceed the platform's own limit.
 
-        A budget above 300s cannot be honoured -- Vercel terminates the call
-        first -- so a misconfiguration here would silently reintroduce exactly
-        the timeout this budget exists to prevent.
+        A budget above the ceiling cannot be honoured -- the platform kills the
+        call first -- so a misconfiguration here silently reintroduces exactly
+        the failure this budget exists to prevent. It is a real backstop, not a
+        formality: `TIME_BUDGET_S=240` was set in production against a ceiling
+        of 60, and the clamp is what keeps that from meaning "no answer".
 
-        The 30s held back is for the response itself: serialising a full `steps`
-        trace and getting it onto the wire is not free, and the budget governs
-        the loop rather than the request around it.
+        `RESPONSE_RESERVE_S` is for the response itself; the budget governs the
+        loop, not the request around it.
         """
-        return min(self.time_budget_s, VERCEL_HARD_LIMIT_S - 30.0)
+        return min(self.time_budget_s, VERCEL_HARD_LIMIT_S - RESPONSE_RESERVE_S)
 
 
 @lru_cache(maxsize=1)
@@ -194,4 +218,10 @@ def get_settings() -> Settings:
     return Settings()
 
 
-__all__ = ["DEFAULT_TIME_BUDGET_S", "VERCEL_HARD_LIMIT_S", "Settings", "get_settings"]
+__all__ = [
+    "DEFAULT_TIME_BUDGET_S",
+    "RESPONSE_RESERVE_S",
+    "VERCEL_HARD_LIMIT_S",
+    "Settings",
+    "get_settings",
+]
