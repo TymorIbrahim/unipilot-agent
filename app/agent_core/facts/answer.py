@@ -122,6 +122,12 @@ def resolve_answer(
     unable to say what it is talking about.
     """
     used: list[str] = []
+    counted: list[str] = []
+    """Facts cited as `{name:count}` rather than listed.
+
+    Tracked because HOW a fact is cited is what separates a real negative answer
+    from a non-answer, where completeness could not -- see the empty-facts rule
+    below."""
     unknown: list[str] = []
     detail_renders: list[str] = []
     detailed: list[tuple[str, Any]] = []
@@ -133,6 +139,8 @@ def resolve_answer(
             unknown.append(name)
             return match.group(0)
         used.append(name)
+        if modifier == "count":
+            counted.append(name)
         rendered = _render(held.value, modifier)
         if modifier == "detail":
             # Kept per SLOT, not merged, so the duplicate rule can tell a course
@@ -217,8 +225,23 @@ def resolve_answer(
     # two, so the boundary stays strict and the PROMPT tells the model how to
     # phrase a negative: cite the collection you searched, not the empty result
     # of searching it. A mix of empty and populated facts is already allowed.
+    #
+    # HOW the fact is cited does separate them, though, where completeness
+    # could not. `{name}` over an empty collection renders "(none)" and says
+    # nothing -- that is the non-answer this rule exists for. `{name:count}`
+    # renders "0", which is a real derived number about a real query, and it is
+    # the only way to state a true negative about a thing that does not exist.
+    #
+    # Without this, the system contradicted itself. The prompt orders: "ASKED
+    # ABOUT A NAMED COURSE, CONFIRM IT EXISTS FIRST ... Nothing back means the
+    # code is not in the catalog ... say that." Then every phrasing of it was
+    # refused here. Live, asked "am I eligible for course 00999999?", the agent
+    # searched the catalog twice, wrote three correct answers -- "I found
+    # {catalog:count} records for that course" -- had all three rejected, and
+    # returned the give-up sentence. A guard that forbids the behaviour the
+    # prompt demands cannot be satisfied by any model.
     empty = [name for name in used if _is_empty(facts[name].value)]
-    if len(empty) == len(set(used)):
+    if len(empty) == len(set(used)) and not set(counted) & set(empty):
         return Ungrounded(
             f"every fact the answer cites is empty ({', '.join(sorted(set(empty)))}). "
             "Fetch the data before writing the answer -- an answer built on empty collections "
