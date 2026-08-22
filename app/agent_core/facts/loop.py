@@ -62,6 +62,20 @@ runs use four to six turns.
 """
 REJECTION_LIMIT = 3
 
+_CORPUS_SEARCH_LIMIT = 5
+"""How many `search_corpus` calls one run may make.
+
+The other governors cannot see this one. `search_corpus` always succeeds and
+always returns hits, so every call counts as progress and `NO_PROGRESS_LIMIT`
+never fires; and `_call_signatures` treats a query differing by one word as a
+different derivation, so the repeat guard misses it too.
+
+Measured: asked for a minimum attendance percentage, which the regulations do
+not set, a run issued 17 searches across 39 turns and 216 seconds. A second,
+asked about physical education, spent 22 turns the same way. Five is well above
+the two or three a genuine multi-page question uses -- the knowledge-base
+question that motivated `NO_PROGRESS_LIMIT` searches four phrasings at most."""
+
 _PREMATURE_ANSWER_LIMIT = 2
 """Answer attempts made before anything is fetched that are FORGIVEN.
 
@@ -149,6 +163,7 @@ async def run_loop(
     idle_turns = 0
     rejections = 0
     premature = 0
+    searches = 0
     seen_derivations: set[str] = set()
     # The budget bounds the CALLER's window, which may have opened before this
     # loop did. On a cold start the process spends ~13s importing a 45MB bundle
@@ -327,6 +342,33 @@ async def run_loop(
             # -- but it does not count as progress, and the model is told.
             repeated = bool(signatures) and all(s in seen_derivations for s in signatures)
             seen_derivations.update(signatures)
+
+            # `search_corpus` is the one tool that ALWAYS succeeds and always
+            # produces a fact, so a run can loop on it forever: every search
+            # "gains" something, `NO_PROGRESS_LIMIT` never fires, and the
+            # repeated-derivation guard misses it because each query differs by
+            # a word. Live, asked for an attendance rule the regulations do not
+            # contain, one run issued 17 searches across 39 turns and 216s
+            # before the clock stopped it.
+            #
+            # A corpus that has been searched this many times and still has not
+            # yielded an answer is telling you something, and it is not "search
+            # again".
+            if call.get("tool") == "search_corpus":
+                searches += 1
+                if searches > _CORPUS_SEARCH_LIMIT:
+                    result.transcript.append(
+                        Turn(turn, "search-capped", f"{searches} corpus searches")
+                    )
+                    observations.append(
+                        f"{DEFECT_NOTE}: you have searched the knowledge base "
+                        f"{_CORPUS_SEARCH_LIMIT} times and it has not answered this. Searching "
+                        "again will not help. Either ANSWER from the passages you already hold, "
+                        "or say plainly that the regulations do not cover it -- an absence IS an "
+                        "answer, and a confident invented rule is the one thing worse than "
+                        "saying so."
+                    )
+                    continue
 
             outcome = await dispatch(call, context)
             context.facts.update(outcome.facts)
