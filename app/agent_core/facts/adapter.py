@@ -222,14 +222,15 @@ the actual plan, and stopping before it answers nothing:
      optional, because at this level they all are.
   3. plan_term -- the domain shortcut that BUILDS the term. Two arguments:
      - candidates = the NAME of the fact holding step 2's set -- every mandatory
-       set from step 1, plus `credit_target` (below) to bound it. You name the
-       collection here, as for `optimize`.
-     - credit_target = {"fact": "credits_needed"}. plan_term then takes every
-       MANDATORY candidate and adds electives only until that many credits are
-       covered, which is step 2 done for you -- one less turn, and it is the
-       step most expensive to get wrong: passing the whole unfinished track
-       scheduled 50.0 credits against a 25.5-credit requirement and answered
-       "4 semesters" where the truth is 2, with every individual term legal.
+       WHOLE set from step 1 -- every remaining course. You name the collection
+       here, as for `optimize`. Do NOT pre-filter it down to the credits still
+       needed: `plan_term` keeps only what is OFFERED that term, so a set
+       trimmed by credits first loses the courses that actually run and the term
+       comes back thin. Measured: trimming to 25.5 credits turned a 6-course,
+       16-credit winter into a 2-course, 4-credit one.
+       (`credit_target` exists for planning the WHOLE remaining degree across
+       many terms, where scheduling more than the degree needs is the risk. For
+       one or two terms ahead, leave it out.)
      - terms = which term(s) to plan. If the request NAMES one ("my spring plan"),
        use it. For a bare "next semester", do NOT default to summer -- a summer
        ("-3") session offers almost nothing, so planning it returns a near-empty

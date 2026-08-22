@@ -107,13 +107,26 @@ class TestTheTargetMayBeAFact:
                           ExpressionDefect)
 
 
-class TestItIsAdvertised:
-    def test_the_catalog_example_uses_it(self) -> None:
-        from app.agent_core.facts.catalog import render_catalog
+class TestItIsNotTheDefaultForNearTermPlans:
+    """Bounding the candidates BEFORE `plan_term` filters by what is offered
+    starves the term. Measured on production: trimming to the 25.5 credits still
+    needed turned a 6-course, 16-credit winter into a 2-course, 4-credit one,
+    because the electives that survived the trim were not the ones that run in
+    winter.
 
-        assert "credit_target" in render_catalog()
+    It is no longer needed for the count either. The semester figure comes from
+    ceil_div(credits_needed, cap), so extra candidates cannot inflate it -- which
+    is what "4 semesters" was, back when the count was read off the plan."""
 
-    def test_the_recipe_tells_the_model_to_pass_the_fact(self) -> None:
+    def test_the_recipe_says_to_pass_the_whole_set(self) -> None:
         from app.agent_core.facts.adapter import SYSTEM_PROMPT
 
-        assert 'credit_target = {"fact": "credits_needed"}' in SYSTEM_PROMPT
+        assert "Do NOT pre-filter it down to the credits still" in SYSTEM_PROMPT
+
+    def test_the_recipe_records_what_trimming_cost(self) -> None:
+        from app.agent_core.facts.adapter import SYSTEM_PROMPT
+
+        assert "2-course, 4-credit one" in SYSTEM_PROMPT
+
+    def test_the_capability_is_still_there_for_whole_degree_plans(self) -> None:
+        assert len(_bounded_by_credits(ALL, 25.5)) < len(ALL)

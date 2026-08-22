@@ -328,7 +328,6 @@ COMPOSITES: tuple[ToolSpec, ...] = (
             "args": {
                 "terms": ["winter"],
                 "candidates": "remaining_courses",
-                "credit_target": {"fact": "credits_needed"},
                 "max_credits": 20,
             },
         },
