@@ -313,8 +313,66 @@ def _answer_text(result: LoopResult) -> str:
             f"I've prepared a request to {result.proposal.action} {name}. Nothing has been "
             "changed yet -- it needs your confirmation before anything happens."
         )
-    # refused / stalled / exhausted -- the reason is diagnostic, not for a student.
-    return _COULD_NOT_ANSWER
+    # refused / stalled / exhausted -- the reason is diagnostic, not for a
+    # student. But the run is rarely empty-handed, and saying nothing throws
+    # away work the student can use.
+    return _partial_from_facts(result) or _COULD_NOT_ANSWER
+
+
+_PARTIAL_PREFIX = (
+    "I ran out of time before I could finish that, but here is what I established "
+    "from your records:"
+)
+_PARTIAL_SUFFIX = (
+    "Ask me for one piece at a time -- a single term's plan, or just the number of "
+    "semesters -- and I can finish it."
+)
+# Facts every run seeds or trivially derives. Echoing them back is not a partial
+# answer, it is the question restated, so a partial made only of these is worse
+# than admitting nothing.
+_NOT_WORTH_REPORTING = frozenset({"me", "program_slug", "catalog_year", "current_semester"})
+
+
+def _partial_from_facts(result: LoopResult) -> str | None:
+    """What the run DID establish, when it could not reach an answer.
+
+    `config.py` has promised for a while that a run out of budget "ships a
+    grounded partial answer rather than being killed". It never did: every
+    non-answer became the same one sentence, and a run that had derived the
+    student's completed credits, the credits they still need and their
+    per-semester cap reported none of it.
+
+    That matters more now the ceiling is 60s rather than the 300s this project
+    believed it had, because the questions that exhaust it are the substantial
+    ones -- and they are precisely the runs holding the most.
+
+    Deterministic, and only SCALARS the run actually derived, rendered with the
+    names they were derived under. No model call: there is by definition no time
+    left for one. Nothing is inferred or combined -- combining is the step that
+    ran out of time, and guessing at it here would be inventing the answer the
+    loop declined to give.
+    """
+    scalars = [
+        (name, held)
+        for name, held in (result.facts or {}).items()
+        if name not in _NOT_WORTH_REPORTING
+        and isinstance(held.value, Scalar)
+        and held.value.kind is not ScalarKind.TEXT
+        and held.value.value not in (None, "")
+    ]
+    if not scalars:
+        return None
+    lines = [f"- {name.replace('_', ' ')}: {_render_scalar(held.value)}" for name, held in scalars]
+    return "\n".join([_PARTIAL_PREFIX, *lines, "", _PARTIAL_SUFFIX])
+
+
+def _render_scalar(value: Scalar) -> str:
+    number = value.value
+    if isinstance(number, bool):
+        return "yes" if number else "no"
+    if isinstance(number, float) and number.is_integer():
+        return str(int(number))
+    return str(number)
 
 
 def _confidence(result: LoopResult) -> str:
