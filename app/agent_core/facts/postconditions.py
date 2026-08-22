@@ -96,6 +96,12 @@ class Violation:
 
 _GROUP_ID = re.compile(r"\b\d{6,8}\.\d+\b")
 _EDGE_ID = re.compile(r"\b\d{6,8}\s*->\s*\d{6,8}\b")
+_OBJECT_ID = re.compile(r"\b[0-9a-f]{24}\b", re.IGNORECASE)
+"""A Mongo-style `_id`, carried over into Postgres as the join key.
+
+Deliberately exact at 24 hex characters. Nothing a student-facing answer
+legitimately contains has this shape: course numbers are 6-8 digits, grades and
+credits are small decimals, semester codes are "YYYY-N"."""
 
 
 def check_no_group_identifiers(text: str) -> list[Violation]:
@@ -125,6 +131,40 @@ def check_no_group_identifiers(text: str) -> list[Violation]:
                 "`requires` field of the edges and name the actual course codes, grouping them "
                 "as the choices they are."
             ),
+        )
+    ]
+
+
+def check_no_object_identifiers(text: str) -> list[Violation]:
+    """A database `_id` must never stand in for the thing it identifies.
+
+    Live, on the deployed agent, "Register me for 00960211 right now." came back:
+
+        I've prepared a request to register 6a3db0e382df7b7cb04552e8.
+
+    That is `courses._id`. The student asked about 00960211, and the proposal
+    they are being invited to confirm names a token they cannot look up, cannot
+    check, and cannot match to the course they asked for.
+
+    Intermittent -- the same prompt run locally named 00960211 correctly -- and
+    that is the argument for catching it in code rather than in the prompt: a
+    fault that appears in one run of two is one no amount of instruction reliably
+    removes, and the answer layer is the last place it can be seen at all.
+
+    24 hex characters is unambiguous here. Course numbers are 6-8 digits, grades
+    and credits are small decimals, and semester codes are "YYYY-N", so nothing
+    a student answer legitimately contains has this shape.
+    """
+    found = _OBJECT_ID.findall(text or "")
+    if not found:
+        return []
+    return [
+        Violation(
+            "object_identifier",
+            f"the answer shows the internal database id {found[0]} where a name or code belongs. "
+            "A student cannot look that up or match it to what they asked about. Join to the "
+            "catalog and slot the `courseNumber` (or the title) instead -- the `_id` is a key "
+            "for joining, never something to show.",
         )
     ]
 

@@ -44,6 +44,7 @@ from app.agent_core.facts.postconditions import (
     check_periods_are_whole,
     check_count_states_its_basis,
     check_no_group_identifiers,
+    check_no_object_identifiers,
     check_gpa_in_range,
     check_grades_in_range,
     check_joint_floor,
@@ -117,6 +118,7 @@ def verify_answer(
     # plan, and that is exactly where group labels were being shown as courses.
     violations = check_no_group_identifiers(answer.text)
     violations += check_no_edge_identifiers(answer.text)
+    violations += check_no_object_identifiers(answer.text)
     violations += check_alternatives_are_distinct(answer.text, question)
     violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)

@@ -91,3 +91,55 @@ class TestTheNonAnswerIsStillRefused:
         result = resolve_answer("That course does not exist.", _facts(), QUESTION)
         assert isinstance(result, Ungrounded)
         assert "no facts at all" in result.reason
+
+
+class TestAnInternalIdNeverReachesAStudent:
+    """Live, on the deployed agent: "Register me for 00960211 right now." ->
+
+        I've prepared a request to register 6a3db0e382df7b7cb04552e8.
+
+    That is `courses._id`. The student asked about 00960211 and is being invited
+    to confirm a proposal naming a token they cannot look up, check, or match to
+    the course they asked for.
+
+    Intermittent -- the same prompt run locally named 00960211 correctly -- which
+    is the argument for catching it in code. A fault that shows up in one run of
+    two is one no amount of prompt instruction reliably removes.
+    """
+
+    def test_the_live_leak_is_caught(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_object_identifiers
+
+        violations = check_no_object_identifiers(
+            "I've prepared a request to register 6a3db0e382df7b7cb04552e8."
+        )
+        assert [v.kind for v in violations] == ["object_identifier"]
+        assert "courseNumber" in violations[0].message, "say what to show instead"
+
+    def test_a_course_number_is_not_mistaken_for_one(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_object_identifiers
+
+        assert check_no_object_identifiers(
+            "I've prepared a request to register 00960211."
+        ) == []
+
+    def test_ordinary_answers_are_untouched(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_object_identifiers
+
+        for answer in (
+            "You have completed 129.5 credits.",
+            "Your GPA is 74.45.",
+            "You need 25.5 more credits, so 2 semesters.",
+            "Winter — 16 credits: 00940704, 00960578, 00960606.",
+            "השלמת 129.5 נקודות.",
+        ):
+            assert check_no_object_identifiers(answer) == [], answer
+
+    def test_it_runs_on_every_answer(self) -> None:
+        from app.agent_core.facts.answer_verify import verify_answer
+
+        class _A:
+            used = []
+            text = "I've prepared a request to register 6a3db0e382df7b7cb04552e8."
+
+        assert [v.kind for v in verify_answer(_A(), {}, "Register me")] == ["object_identifier"]
