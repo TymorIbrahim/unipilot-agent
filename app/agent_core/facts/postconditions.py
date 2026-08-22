@@ -186,6 +186,38 @@ def check_claimed_pass_is_on_the_transcript(
     return []
 
 
+_JOIN_SIDE_LABEL = re.compile(r"\b(?:left|right)\.\w+")
+
+
+def check_no_join_side_labels(text: str) -> list[Violation]:
+    """A joined record's internal field names must not reach the student.
+
+    `join` prefixes its inputs to keep them apart -- `left.requires`,
+    `right.title` -- and `:detail` prints whatever a record carries. Live, asked
+    which remaining course unlocks the most others:
+
+        - left.requires 01040017 · right.title הסתברות מ · unlocked 1
+
+    Three labels from the query engine and none from the domain. The prompt has
+    said "ALWAYS project BEFORE :detail" for a while; this is the same rule
+    where it can be enforced rather than requested.
+
+    Same family as the edge ids and the ObjectId: an internal artifact that
+    reads as plausible because a real value sits next to it.
+    """
+    found = _JOIN_SIDE_LABEL.findall(text or "")
+    if not found:
+        return []
+    return [
+        Violation(
+            "join_side_label",
+            f"the answer shows '{found[0]}', which is a field name from the join rather than "
+            "anything a student would recognise. `project` the joined rows to the two to four "
+            "columns the answer needs, giving each a plain name, and slot THAT.",
+        )
+    ]
+
+
 def check_no_object_identifiers(text: str) -> list[Violation]:
     """A database `_id` must never stand in for the thing it identifies.
 

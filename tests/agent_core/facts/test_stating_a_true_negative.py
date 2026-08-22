@@ -143,3 +143,48 @@ class TestAnInternalIdNeverReachesAStudent:
             text = "I've prepared a request to register 6a3db0e382df7b7cb04552e8."
 
         assert [v.kind for v in verify_answer(_A(), {}, "Register me")] == ["object_identifier"]
+
+
+class TestJoinFieldNamesNeverReachAStudent:
+    """`join` prefixes its inputs to keep them apart, and `:detail` prints
+    whatever a record carries. Asked which remaining course unlocks the most
+    others, the deployed agent answered:
+
+        - left.requires 01040017 · right.title הסתברות מ · unlocked 1
+
+    Three labels from the query engine and none from the domain. The prompt has
+    said "ALWAYS project BEFORE :detail" for a while; this enforces it.
+    """
+
+    def test_the_live_leak_is_caught(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_join_side_labels
+
+        violations = check_no_join_side_labels(
+            "- left.requires 01040017 · right.title הסתברות מ · unlocked 1")
+        assert [v.kind for v in violations] == ["join_side_label"]
+
+    def test_the_refusal_says_to_project(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_join_side_labels
+
+        message = check_no_join_side_labels("left.requires 01040017")[0].message
+        assert "project" in message.lower()
+
+    def test_ordinary_prose_is_untouched(self) -> None:
+        from app.agent_core.facts.postconditions import check_no_join_side_labels
+
+        for answer in (
+            "You have completed 129.5 credits.",
+            "The course on the left. Right, that is all.",
+            "- number 00940704 · name סדנת תכנות · credits 1.5",
+        ):
+            assert check_no_join_side_labels(answer) == [], answer
+
+    def test_it_runs_on_every_answer(self) -> None:
+        from app.agent_core.facts.answer_verify import verify_answer
+
+        class _A:
+            used = []
+            text = "The winner is left.requires 01040017."
+
+        assert [v.kind for v in verify_answer(_A(), {}, "which unlocks most?")] == \
+               ["join_side_label"]
