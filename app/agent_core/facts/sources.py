@@ -204,8 +204,15 @@ STUDENT_PROFILES = SourceSchema(
     },
     field_notes={
         "maxCreditsPerSemester": (
-            "this student's own per-semester credit limit, and the ONLY cap that applies to "
-            "them -- a plan over it is refused.\n"
+            "THIS STUDENT'S own per-semester limit -- the only cap that applies when PLANNING "
+            "for them, and a plan over it is refused.\n"
+            "     IT IS NOT THE RULE. \"How many credits am I allowed to take?\" is a "
+            "REGULATIONS question: the undergraduate regulations set the maximum at 29 without "
+            "special approval, and above that needs the faculty head and the Dean. Answering it "
+            "from this column reported \"your maximum allowed load is 18 credits\" without "
+            "reading the regulations at all -- a personal setting presented as institutional "
+            "policy. Asked what is ALLOWED, `search_corpus` the regulations; asked what to PLAN, "
+            "use this.\n"
             "     DERIVE \"how many semesters to graduate\" FROM IT with the `ceil_div` "
             "operator: {\"ceil_div\": [{\"fact\": \"credits_needed\"}, {\"fact\": "
             "\"max_credits_per_semester\"}]}, which rounds UP because a semester cannot be "
