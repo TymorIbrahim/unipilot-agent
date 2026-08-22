@@ -77,19 +77,30 @@ its own name, the same way `_POINTS_FACTS` does."""
 _REQUIRED_FACTS = (
     "credits_required", "required_credits", "total_required_credits",
     "degree_credits", "program_credits", "totalCredits", "total_credits_required",
+    "degree_total", "degree_total_credits",
 )
 _COMPLETED_FACTS = (
     "completed_credits", "credits_completed", "earned_credits", "total_credits",
+    "total_completed_credits", "passed_credits",
 )
 _REMAINING_FACTS = (
     "remaining_credits", "credits_remaining", "credits_to_go", "remaining_required_credits",
+    "credits_needed", "credits_gap", "needed_credits",
 )
 """The three halves of "how much is left", kept apart on purpose.
 
 `_REMAINING_FACTS` is consulted LAST and only when the subtraction is
 unavailable -- see `_remaining_required`. A fact called `remaining_credits` has
 held the credits still to EARN in one run and the credits still on OFFER in the
-next, and they differ here by a factor of two."""
+next, and they differ here by a factor of two.
+
+The spellings are not guesses. Every name here was read off a live trace: three
+runs of the same question named the gap `credits_needed` in all three and
+`credits_gap` in one, and the one that ALSO named its inputs `required_credits`
+and `earned_credits` is the only one where this resolved -- so the check fired
+on that run and skipped on the other two, which is exactly the difference
+between the correct answer and the two thin ones. A lookup that misses is
+indistinguishable from a check that does not exist."""
 
 _GPA_TOLERANCE = 0.5
 _FLOOR = re.compile(r"above\s+(\d+(?:\.\d+)?)")

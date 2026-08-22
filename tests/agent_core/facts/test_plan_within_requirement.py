@@ -307,3 +307,47 @@ class TestACountMustShowItsWorking:
         naming unknown facts -- a refusal whose own advice cannot be followed."""
         message = check_count_states_its_basis("It will take 2 semesters.", REMAINING)[0].message
         assert "{" not in message, "the fix must not be phrased as slots the model does not hold"
+
+
+class TestTheNamesCameFromTraces:
+    """Every spelling in the lookup was read off a live run, not invented.
+
+    Three runs of `semesters_to_graduate` all answered "2 semesters" correctly.
+    One stated the 25.5 it followed from and scored correct; two did not and
+    scored thin. The difference was not the model's willingness -- it was that
+    only one of the three named its inputs something the lookup recognised, so
+    on the other two `_remaining_required` returned None and the check silently
+    skipped. A lookup that misses is indistinguishable from no check at all.
+    """
+
+    def test_the_gap_name_all_three_runs_used(self) -> None:
+        facts = {"credits_needed": HeldFact(value=Scalar(Q, REMAINING),
+                                            basis=Basis.SIMULATED)}
+        assert _remaining_required(facts) == REMAINING
+
+    def test_the_run_that_skipped_now_resolves(self) -> None:
+        """Run 1's actual fact names, from its trace."""
+        facts = {
+            "degree_total_credits": HeldFact(value=Scalar(Q, REQUIRED), basis=Basis.OFFICIAL_RECORD),
+            "total_completed_credits": HeldFact(value=Scalar(Q, COMPLETED),
+                                                basis=Basis.OFFICIAL_RECORD),
+            "credits_gap": HeldFact(value=Scalar(Q, REMAINING), basis=Basis.SIMULATED),
+        }
+        assert _remaining_required(facts) == REMAINING
+
+    def test_the_run_that_worked_still_works(self) -> None:
+        """Run 2's names -- the only ones the first version recognised."""
+        facts = {
+            "required_credits": HeldFact(value=Scalar(Q, REQUIRED), basis=Basis.OFFICIAL_RECORD),
+            "earned_credits": HeldFact(value=Scalar(Q, COMPLETED), basis=Basis.OFFICIAL_RECORD),
+        }
+        assert _remaining_required(facts) == REMAINING
+
+    def test_the_subtraction_still_wins_over_the_new_names(self) -> None:
+        """Widening the fallback must not weaken the preference for deriving it."""
+        facts = {
+            "required_credits": HeldFact(value=Scalar(Q, REQUIRED), basis=Basis.OFFICIAL_RECORD),
+            "earned_credits": HeldFact(value=Scalar(Q, COMPLETED), basis=Basis.OFFICIAL_RECORD),
+            "credits_needed": HeldFact(value=Scalar(Q, 50.0), basis=Basis.SIMULATED),
+        }
+        assert _remaining_required(facts) == REMAINING

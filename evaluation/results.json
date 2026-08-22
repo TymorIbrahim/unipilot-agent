@@ -6,7 +6,9 @@
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
     "steps": 2,
-    "elapsed_s": 20.5
+    "error": null,
+    "elapsed_s": 8.7,
+    "trace": "evaluation/traces/credits_completed-0.json"
   },
   {
     "id": "credits_completed",
@@ -15,7 +17,9 @@
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
     "steps": 2,
-    "elapsed_s": 4.8
+    "error": null,
+    "elapsed_s": 4.5,
+    "trace": "evaluation/traces/credits_completed-1.json"
   },
   {
     "id": "credits_completed",
@@ -24,43 +28,53 @@
     "why": "matches ground truth",
     "answer": "You have completed 129.5 credits so far.",
     "steps": 2,
-    "elapsed_s": 5.0
+    "error": null,
+    "elapsed_s": 5.3,
+    "trace": "evaluation/traces/credits_completed-2.json"
   },
   {
     "id": "credits_required_and_remaining",
     "run": 0,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits, and you still need 25.5.",
+    "answer": "Your degree requires 155 credits, and you still need 25.5 credits.",
     "steps": 2,
-    "elapsed_s": 10.6
+    "error": null,
+    "elapsed_s": 8.1,
+    "trace": "evaluation/traces/credits_required_and_remaining-0.json"
   },
   {
     "id": "credits_required_and_remaining",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits total, and you still need 25.5.",
-    "steps": 3,
-    "elapsed_s": 17.7
+    "answer": "Your degree requires 155 credits, and you still need 25.5 credits.",
+    "steps": 2,
+    "error": null,
+    "elapsed_s": 7.5,
+    "trace": "evaluation/traces/credits_required_and_remaining-1.json"
   },
   {
     "id": "credits_required_and_remaining",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your degree requires 155 credits in total, and you still need 25.5 credits to finish.",
-    "steps": 3,
-    "elapsed_s": 13.6
+    "answer": "Your degree requires 155 credits in total, and you still need 25.5 more credits.",
+    "steps": 2,
+    "error": null,
+    "elapsed_s": 9.6,
+    "trace": "evaluation/traces/credits_required_and_remaining-2.json"
   },
   {
     "id": "english_requirement",
     "run": 0,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "You have to satisfy 2 English-language courses to graduate.",
+    "answer": "To graduate, you must satisfy 2 English-language courses.",
     "steps": 4,
-    "elapsed_s": 14.2
+    "error": null,
+    "elapsed_s": 15.1,
+    "trace": "evaluation/traces/english_requirement-0.json"
   },
   {
     "id": "english_requirement",
@@ -69,177 +83,217 @@
     "why": "matches ground truth",
     "answer": "You must satisfy 2 English-language courses to graduate.",
     "steps": 4,
-    "elapsed_s": 14.2
+    "error": null,
+    "elapsed_s": 11.3,
+    "trace": "evaluation/traces/english_requirement-1.json"
   },
   {
     "id": "english_requirement",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "You need 2 English-language courses to graduate.",
+    "answer": "You need 2 English courses to satisfy the English language requirement for graduation.",
     "steps": 4,
-    "elapsed_s": 31.6
+    "error": null,
+    "elapsed_s": 11.4,
+    "trace": "evaluation/traces/english_requirement-2.json"
   },
   {
     "id": "eligibility_00960211",
     "run": 0,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "For 00960211, you are yes. It requires 1 prerequisite group: any one of 00940224, 00940226.",
+    "answer": "For 00960211, eligibility is yes. It has 1 prerequisite group: any one of 00940224, 00940226.",
     "steps": 5,
-    "elapsed_s": 62.5
+    "error": null,
+    "elapsed_s": 58.4,
+    "trace": "evaluation/traces/eligibility_00960211-0.json"
   },
   {
     "id": "eligibility_00960211",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "You are eligible -- you meet 1 of 1 prerequisite groups. 00960211 requires 1 group: any one of 00940224, 00940226.",
-    "steps": 3,
-    "elapsed_s": 48.3
+    "answer": "Yes — you meet 1 of 1 prerequisite groups, so you are eligible to take 00960211.\n\nIt has 1 prerequisite group: any one of 00940224, 00940226.",
+    "steps": 4,
+    "error": null,
+    "elapsed_s": 21.9,
+    "trace": "evaluation/traces/eligibility_00960211-1.json"
   },
   {
     "id": "eligibility_00960211",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "yes — 00960211 has 1 prerequisite group: any one of 00940224, 00940226. You have already met 1 of 1 groups, with no unmet groups.",
-    "steps": 3,
-    "elapsed_s": 30.6
+    "answer": "Eligibility: yes. It has 1 prerequisite group, and any one of 00940224, 00940226 satisfies it.",
+    "steps": 4,
+    "error": null,
+    "elapsed_s": 35.0,
+    "trace": "evaluation/traces/eligibility_00960211-2.json"
   },
   {
     "id": "eligibility_01040174",
     "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "01040174 is not eligible: it has 1 prerequisite group and you meet 0. You need any one of 01040066, 01040166.",
-    "steps": 3,
-    "elapsed_s": 22.2
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 1,
-    "verdict": "wrong",
-    "why": "never states the negative, and the data says no",
-    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
-    "steps": 6,
-    "elapsed_s": 38.8
-  },
-  {
-    "id": "eligibility_01040174",
-    "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
     "answer": "No — 01040174 needs any one of 01040066, 01040166, and you have passed none of them.",
-    "steps": 5,
-    "elapsed_s": 26.2
+    "steps": 6,
+    "error": null,
+    "elapsed_s": 34.6,
+    "trace": "evaluation/traces/eligibility_01040174-0.json"
   },
   {
-    "id": "forecast_00940412_spring",
-    "run": 0,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "The course is offered next spring: yes.",
-    "steps": 2,
-    "elapsed_s": 9.8
-  },
-  {
-    "id": "forecast_00940412_spring",
+    "id": "eligibility_01040174",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "yes — 00940412 is forecast to be offered next spring.",
+    "answer": "No — 01040174 needs any one of 01040066, 01040166, and you have passed 0 of them. It has 1 prerequisite group, and you meet 0.",
+    "steps": 6,
+    "error": null,
+    "elapsed_s": 27.2,
+    "trace": "evaluation/traces/eligibility_01040174-1.json"
+  },
+  {
+    "id": "eligibility_01040174",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "No — 01040174 needs any one of 01040066, 01040166, and you have passed neither. You meet 0 of 1 prerequisite groups.",
     "steps": 3,
-    "elapsed_s": 17.2
+    "error": null,
+    "elapsed_s": 23.6,
+    "trace": "evaluation/traces/eligibility_01040174-2.json"
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "00940412 will be offered next spring: yes.",
+    "steps": 3,
+    "error": null,
+    "elapsed_s": 11.9,
+    "trace": "evaluation/traces/forecast_00940412_spring-0.json"
+  },
+  {
+    "id": "forecast_00940412_spring",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "00940412 will be offered next spring: yes.",
+    "steps": 2,
+    "error": null,
+    "elapsed_s": 8.2,
+    "trace": "evaluation/traces/forecast_00940412_spring-1.json"
   },
   {
     "id": "forecast_00940412_spring",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "The forecast says it will be offered next spring: yes.",
-    "steps": 2,
-    "elapsed_s": 12.1
+    "answer": "Yes.",
+    "steps": 3,
+    "error": null,
+    "elapsed_s": 9.7,
+    "trace": "evaluation/traces/forecast_00940412_spring-2.json"
   },
   {
     "id": "gpa_target_impossible",
     "run": 0,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your current GPA is 74.45. Across your remaining 25.5 credits, the joint minimum would be 138.57 in every remaining course, but that target is not reachable. Feasibility: no.",
-    "steps": 4,
-    "elapsed_s": 75.5
+    "answer": "Your current GPA is 74.45. You still need 25.5 more credits, and the single minimum grade that would have to hold across every remaining course is 138.57. Since that required grade is above the maximum possible grade, the GPA target is not reachable with this remaining load.",
+    "steps": 5,
+    "error": null,
+    "elapsed_s": 47.0,
+    "trace": "evaluation/traces/gpa_target_impossible-0.json"
   },
   {
     "id": "gpa_target_impossible",
     "run": 1,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your current GPA is 74.45, which is below the target. To reach it across your remaining courses, you would need at least 138.57 in every remaining course across 25.5 credits. That requirement is above the maximum possible grade, so the target is not reachable with this load.",
+    "answer": "Your current GPA is 74.45. You still need 25.5 more credits. To raise the whole remaining load to the requested floor, you would need 138.57 in every remaining course, but that is above the grading scale, so the target is not reachable with this set of courses.",
     "steps": 4,
-    "elapsed_s": 66.8
+    "error": null,
+    "elapsed_s": 58.3,
+    "trace": "evaluation/traces/gpa_target_impossible-1.json"
   },
   {
     "id": "gpa_target_impossible",
     "run": 2,
     "verdict": "correct",
     "why": "matches ground truth",
-    "answer": "Your current GPA is 74.45. Across your remaining 25.5 credits, the joint minimum grade needed in every remaining course is 138.57. Because 138.57 is above the maximum possible course grade, the target GPA is not reachable with this load.",
+    "answer": "Your current GPA is 74.45, and you have 25.5 credits left. Even if you earned the same grade in every remaining course, you'd need 138.57, which is above the maximum possible grade, so the target is not reachable with the remaining load.",
     "steps": 4,
-    "elapsed_s": 68.7
+    "error": null,
+    "elapsed_s": 53.6,
+    "trace": "evaluation/traces/gpa_target_impossible-2.json"
   },
   {
     "id": "prerequisite_chain_00970135",
+    "run": 0,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "Before you can take 00970135, you need 00960324 first. You are already eligible for 00960324 because you passed 00940314.",
+    "steps": 5,
+    "error": null,
+    "elapsed_s": 30.4,
+    "trace": "evaluation/traces/prerequisite_chain_00970135-0.json"
+  },
+  {
+    "id": "prerequisite_chain_00970135",
+    "run": 1,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "To take 00970135, you first need 00960324. 00960324 is not yet takeable: you have passed 0 of its prerequisite choices, and the choices are 00940314, 00980413.",
+    "steps": 7,
+    "error": null,
+    "elapsed_s": 56.2,
+    "trace": "evaluation/traces/prerequisite_chain_00970135-1.json"
+  },
+  {
+    "id": "prerequisite_chain_00970135",
+    "run": 2,
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "To take 00970135, you need 00960324 first. You can already take 00960324 because 00940314 satisfies its prerequisite group.",
+    "steps": 5,
+    "error": null,
+    "elapsed_s": 50.1,
+    "trace": "evaluation/traces/prerequisite_chain_00970135-2.json"
+  },
+  {
+    "id": "semesters_to_graduate",
     "run": 0,
     "verdict": "incomplete",
-    "why": "right answer, but never states 00940314",
-    "answer": "You need 00960324 first. 00960324 is already takeable now: it has 1 prerequisite group, and you have already satisfied it by passing 00980413. So the path is: take 00960324, then you can take 00970135.",
+    "why": "right answer, but never states 25.5",
+    "answer": "It will take you 2 semesters to graduate.\n\nWinter — 16 credits\n- number 00940704 · name סדנת תכנות בשפת סי · type mandatory · credits 1.5 · prereq met\n- number 00960578 · name בחירה חברתית והחלטות משותפות · type elective · credits 2.5 · prereq met\n- number 00960606 · name כלכלה התנהגותית בסביבה טכנולוגית · type elective · credits 3 · prereq met\n- number 00960620 · name Introduction to Human Factors Engineering · type elective · credits 3.5 · prereq met\n- number 00970317 · name תורת המשחקים השיתופיים · type elective · credits 2.5 · prereq met\n- number 00970325 · name תיאוריה ושיטות באופטימיזציה דלילה · type elective · credits 3 · prereq met\n\nSpring — 12 credits\n- number 00960211 · name מודלים למסחר אלקטרוני · type mandatory · credits 3.5 · prereq met\n- number 00970800 · name עקרונות השיווק · type mandatory · credits 3.5 · prereq met\n- number 00960212 · name מודלים גרפים הסתברותיים · type elective · credits 2 · prereq met\n- number 00970414 · name סטטיסטיקה 2 · type elective · credits 3 · prereq met",
     "steps": 6,
-    "elapsed_s": 51.2
+    "error": null,
+    "elapsed_s": 155.3,
+    "trace": "evaluation/traces/semesters_to_graduate-0.json"
   },
   {
-    "id": "prerequisite_chain_00970135",
+    "id": "semesters_to_graduate",
     "run": 1,
     "verdict": "incomplete",
-    "why": "right answer, but never states 00940314",
-    "answer": "Before you can take 00970135, you need 00960324 first. yes -- you already meet the prerequisite for 00960324, so that blocker can be taken now. The requirement for 00970135 is the one prerequisite group in 1, and it is satisfied only by 00960324.",
-    "steps": 3,
-    "elapsed_s": 39.2
-  },
-  {
-    "id": "prerequisite_chain_00970135",
-    "run": 2,
-    "verdict": "correct",
-    "why": "matches ground truth",
-    "answer": "You need to take 00960324 first. You have not passed any of its direct prerequisite choices yet: 0 of 2 are met. To get into that blocker, you need any one of 00940314, 00980413.",
-    "steps": 5,
-    "elapsed_s": 47.3
-  },
-  {
-    "id": "semesters_to_graduate",
-    "run": 0,
-    "verdict": "wrong",
-    "why": "declined to answer a question the data supports",
-    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
-    "steps": 6,
-    "elapsed_s": 252.7
-  },
-  {
-    "id": "semesters_to_graduate",
-    "run": 1,
-    "verdict": "wrong",
-    "why": "declined to answer a question the data supports",
-    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
-    "steps": 15,
-    "elapsed_s": 243.8
+    "why": "right answer, but never states 25.5",
+    "answer": "It will take you 2 semesters.\n\nPlanned credits by term:\n- term winter · credits 16\n- term spring · credits 12\n\nCourses to take:\nwinter, winter, winter, winter, winter, winter, spring, spring, spring, spring",
+    "steps": 8,
+    "error": null,
+    "elapsed_s": 155.7,
+    "trace": "evaluation/traces/semesters_to_graduate-1.json"
   },
   {
     "id": "semesters_to_graduate",
     "run": 2,
-    "verdict": "wrong",
-    "why": "declined to answer a question the data supports",
-    "answer": "I wasn't able to work that out from your records with confidence. Could you rephrase it, or ask about something more specific?",
-    "steps": 12,
-    "elapsed_s": 245.9
+    "verdict": "correct",
+    "why": "matches ground truth",
+    "answer": "You need 25.5 more credits, so 2 semesters.\n\nWinter — 16 credits\n- number 00940704 · name סדנת תכנות בשפת סי · type mandatory · credits 1.5\n- number 00960578 · name בחירה חברתית והחלטות משותפות · type elective · credits 2.5\n- number 00960606 · name כלכלה התנהגותית בסביבה טכנולוגית · type elective · credits 3\n- number 00960620 · name Introduction to Human Factors Engineering · type elective · credits 3.5\n- number 00970317 · name תורת המשחקים השיתופיים · type elective · credits 2.5\n- number 00970325 · name תיאוריה ושיטות באופטימיזציה דלילה · type elective · credits 3\n\nSpring — 12 credits\n- number 00960211 · name מודלים למסחר אלקטרוני · type mandatory · credits 3.5\n- number 00970800 · name עקרונות השיווק · type mandatory · credits 3.5\n- number 00960212 · name מודלים גרפים הסתברותיים · type elective · credits 2\n- number 00970414 · name סטטיסטיקה 2 · type elective · credits 3",
+    "steps": 10,
+    "error": null,
+    "elapsed_s": 163.2,
+    "trace": "evaluation/traces/semesters_to_graduate-2.json"
   }
 ]
