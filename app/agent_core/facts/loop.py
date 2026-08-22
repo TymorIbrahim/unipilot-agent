@@ -184,6 +184,7 @@ async def run_loop(
         turn_started = time.monotonic()
         reply = await model.respond(_prompt(question, context, observations, history))
         longest_turn = max(longest_turn, time.monotonic() - turn_started)
+        reply = _lift_answer_call(reply)
         if on_progress is not None:
             _report_progress(on_progress, reply)
 
@@ -565,3 +566,46 @@ def _prompt(
 
 
 __all__ = ["LoopResult", "MAX_TURNS", "Model", "Turn", "render_sources", "run_loop"]
+
+
+_REPLY_SHAPED_TOOLS = {"answer", "decline"}
+
+
+def _lift_answer_call(reply: Mapping[str, Any]) -> Mapping[str, Any]:
+    """`{"calls": [{"tool": "answer", ...}]}` means `{"answer": ...}`.
+
+    Answering and declining are REPLY SHAPES, not tools -- there is no `answer`
+    in the catalog, and there cannot be, since it ends the run rather than
+    producing a fact. A model holding a full set of facts nonetheless reaches
+    for the shape it has used all run, and the dispatcher then reports "unknown
+    tool 'answer'". That cost a turn in four of ten live requests, and one run
+    spent its second-to-last turn on it.
+
+    The intent is unambiguous, so the turn is not spent learning the protocol.
+    The text is lifted out and travels the ordinary answer path -- grounding,
+    post-conditions, the lot -- because being forgiving about the ENVELOPE must
+    not be forgiving about the contents.
+
+    Only when the reply has no answer of its own, so a well-formed reply is
+    never rewritten.
+    """
+    if not isinstance(reply, Mapping) or "answer" in reply or "decline" in reply:
+        return reply
+    calls = reply.get("calls") or ()
+    if not isinstance(calls, Sequence) or isinstance(calls, (str, bytes)):
+        return reply
+    for call in calls:
+        if not isinstance(call, Mapping):
+            continue
+        tool = str(call.get("tool") or "").strip().lower()
+        if tool not in _REPLY_SHAPED_TOOLS:
+            continue
+        args = call.get("args")
+        text = None
+        if isinstance(args, Mapping):
+            text = args.get(tool) or args.get("text") or args.get("answer")
+        elif isinstance(args, str):
+            text = args
+        if isinstance(text, str) and text.strip():
+            return {tool: text}
+    return reply

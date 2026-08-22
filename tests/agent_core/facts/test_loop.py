@@ -575,3 +575,61 @@ class TestARepeatedCallThatFails:
         await run_loop("q", model, _context(count=Scalar(Q, 3.0)), max_turns=3)
         assert "already ran" in model.prompts[-1]
         assert "Repeating it cannot change the result" in model.prompts[-1]
+
+
+class TestAnsweringIsAReplyShapeNotATool:
+    """`{"calls": [{"tool": "answer", ...}]}` cost a turn in four of ten live
+    requests, and one run spent its second-to-last turn on it.
+
+    There is no `answer` tool and there cannot be -- it ends the run rather than
+    producing a fact -- so the dispatcher reported "unknown tool 'answer';
+    available: [...]" and the model wrote the same text again next turn in the
+    right envelope. The intent was never in doubt.
+
+    Being forgiving about the ENVELOPE must not be forgiving about the contents:
+    the lifted text goes down the ordinary answer path, grounding and
+    post-conditions included.
+    """
+
+    async def test_the_answer_call_is_honoured(self) -> None:
+        model = _ScriptedModel({"calls": [{"tool": "answer",
+                                           "args": {"answer": "You have {count} courses."}}]})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.outcome == "answered"
+        assert result.answer.text == "You have 3 courses."
+        assert result.turns == 1, "the turn must not be spent learning the protocol"
+
+    async def test_it_is_still_grounded(self) -> None:
+        """A typed digit inside a lifted answer is refused exactly as usual."""
+        model = _ScriptedModel(
+            {"calls": [{"tool": "answer", "args": {"answer": "You have 42 courses."}}]},
+            {"answer": "You have {count} courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.outcome == "answered"
+        assert any(t.action in ("rejected", "premature-answer") for t in result.transcript)
+
+    async def test_a_decline_call_is_honoured_too(self) -> None:
+        model = _ScriptedModel({"calls": [{"tool": "decline",
+                                           "args": {"decline": "Not about your studies."}}]})
+        result = await run_loop("weather?", model, _context())
+        assert result.outcome == "declined"
+
+    async def test_a_real_reply_is_never_rewritten(self) -> None:
+        model = _ScriptedModel({"answer": "You have {count} courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.answer.text == "You have 3 courses."
+
+    async def test_ordinary_calls_are_untouched(self) -> None:
+        model = _ScriptedModel(
+            {"calls": [{"tool": "find", "as": "x", "args": {"source": "courses"}}]},
+            {"answer": "You have {count} courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.outcome == "answered"
+        assert any(t.action == "call" for t in result.transcript)
+
+    async def test_an_answer_call_with_no_text_falls_through(self) -> None:
+        """Nothing to lift means the dispatcher reports it as it always did."""
+        model = _ScriptedModel({"calls": [{"tool": "answer", "args": {}}]},
+                               {"answer": "You have {count} courses."})
+        result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
+        assert result.outcome == "answered"
