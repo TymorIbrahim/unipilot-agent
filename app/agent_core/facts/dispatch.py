@@ -454,6 +454,28 @@ def _canonicalise_codes(collection: Collection) -> Collection:
 
 
 async def _compute(_name: Any, args: Mapping[str, Any], context: DispatchContext) -> Dispatched:
+    if not args.get("pipelines"):
+        # A `compute` with no pipelines used to return NOTHING -- no facts and no
+        # defect -- so the turn vanished without explanation and the model
+        # repeated it verbatim. Live, twice in one run:
+        #
+        #   compute({"ceil_div": [{"fact": "credits_needed"},
+        #                         {"fact": "max_credits_per_semester"}]}) -> 0 facts
+        #
+        # The expression is correct; it is simply at the top level, where
+        # `compute` expects a list of named pipelines. A silent no-op is the
+        # worst possible response to that, because nothing distinguishes it from
+        # a computation that legitimately produced no rows.
+        return _defect(
+            _name,
+            ExpressionDefect(
+                0,
+                "`compute` takes a LIST of named pipelines, and this call has none. Wrap the "
+                'expression: {"pipelines": [{"name": "semesters", "value": '
+                '{"ceil_div": [{"fact": "a"}, {"fact": "b"}]}}]}. A pipeline over a collection '
+                'names its `source` instead; one over held scalars needs only `name` and `value`.',
+            ),
+        )
     pipelines = parse_pipelines(args.get("pipelines", []))
 
     def resolve_predicates(pipeline: Any, available: Mapping[str, Any]) -> Any:
