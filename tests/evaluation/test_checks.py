@@ -488,3 +488,34 @@ class TestCountingSemesters:
                               must=(25.5,), **self.RANGE)
         assert verdict == "wrong"
         assert "declined" in why
+
+
+class TestTheCopulaYes:
+    """Live answer, scored FAIL while correct:
+
+        "The course exists in the catalog, and the forecast for next spring
+         is yes."
+
+    `_AFFIRMS` accepted "yes" only at a start or after punctuation, deliberately:
+    a bare \\byes\\b matched the hypothetical the prompt asks for, "To make it
+    yes, pass 01040066", turning a correct DENIAL into a self-contradiction. The
+    copula falls between the two -- and it is how the model most often ends an
+    affirmative forecast.
+    """
+
+    def test_the_live_answer_affirms(self) -> None:
+        assert claims_yes("The course exists in the catalog, and the forecast for "
+                          "next spring is yes.")
+
+    def test_the_hypothetical_still_does_not(self) -> None:
+        assert not claims_yes("To make it yes, pass any one of 01040066, 01040166.")
+
+    def test_a_denial_carrying_the_hypothetical_is_still_only_a_denial(self) -> None:
+        answer = "No -- you meet 0 of 1. To make it yes, pass 01040066."
+        assert claims_no(answer)
+        assert not claims_yes(answer), "would score as affirming and denying at once"
+
+    def test_the_other_copulas(self) -> None:
+        for answer in ("The answer is yes.", "Offered next spring: the forecast was yes.",
+                       "It will be yes if the pattern holds."):
+            assert claims_yes(answer), answer

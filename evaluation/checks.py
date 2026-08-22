@@ -56,6 +56,12 @@ _AFFIRMS = re.compile(
     # asks for: "No -- you meet 0 of 1. To make it yes, pass 01040066." That is
     # a correct DENIAL, and it scored as affirming and denying at once.
     r"(?:^|[:.\-—–]\s*)yes\b"
+    # The COPULA form, which the punctuation rule above cannot see: "the
+    # forecast for next spring is yes" scored "never affirms, and the data says
+    # yes" on an answer whose last word is yes. Safe against the hypothetical
+    # the prompt asks for -- "To make it yes, pass 01040066" is "make it yes",
+    # never "is yes".
+    r"|\b(?:is|are|was|will\s+be)\s+yes\b"
     r"|\byou are eligible\b|\byou can take\b"
     r"|\b(?:you\s+)?(?:have\s+)?(?:meet|meets|met)\s+[1-9]\d*\s+of\b"
     # A projection affirms in the passive too: "next spring is forecast to
