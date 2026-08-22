@@ -380,8 +380,22 @@ _STRANDED_YES = re.compile(
     # original adjacent-only pattern did too, so this is an old bug the widening
     # would have made louder. A stranded yes is followed by the word it wrongly
     # qualifies; a real one is followed by a conjunction or a clause.
+    # WHITELISTED by the word that follows, not blacklisted by conjunctions.
+    # The blacklist deleted a real negation: "there are 0 transcript attempts,
+    # so there is no grade on record" shipped as "so there is grade on record".
+    # "no" before a NOUN is a determiner and carries the whole meaning of the
+    # sentence, where "no" before a predicate adjective is the stranded bool
+    # this repair is for -- and no blacklist of conjunctions can tell those
+    # apart, because neither "grade" nor "record" is a conjunction.
+    #
+    # A rule that edits an answer which already passed grounding must fail
+    # CLOSED. Listing the adjectives this domain actually produces means an
+    # unfamiliar sentence is left exactly as written, which is the safe
+    # direction; the old rule's unfamiliar sentence lost a word.
     r"\b(are|is|am|was|were)(\s+\w+)?\s+(yes|no)\s+"
-    r"(?!and\b|or\b|but\b|so\b|because\b|then\b|which\b|that\b|if\b|while\b)(?=[a-z])",
+    r"(?=(?:eligible|offered|available|expected|required|reachable|achievable"
+    r"|possible|feasible|met|complete|completed|scheduled|open|full|passed"
+    r"|allowed|permitted|exempt|valid)\b)",
     re.IGNORECASE,
 )
 
@@ -402,8 +416,24 @@ def _tidy_affirmations(text: str) -> str:
     answer CLAIMS. Both rewrites drop a redundant word and touch nothing else.
     """
     tidied = _DOUBLED_YES.sub(lambda m: m.group(1), text)
-    tidied = _STRANDED_YES.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} ", tidied)
+    tidied = _STRANDED_YES.sub(_repair_stranded, tidied)
     return _STUTTERED_PHRASE.sub(lambda m: m.group(1), tidied)
+
+
+def _repair_stranded(match: "re.Match[str]") -> str:
+    """Drop a stranded "yes"; turn a stranded "no" into "not".
+
+    Deleting either was a meaning INVERSION in the negative case, and it was
+    here from the beginning: "You are no eligible for 01040174" -- the bool
+    rendering of an ineligible verdict -- came out as "You are eligible for
+    01040174", telling a student they may register for something they cannot.
+    The same edit that merely tidies an affirmative reverses a denial, because
+    "no" is doing the negating and "yes" is not doing anything.
+    """
+    copula, adverb, verdict = match.group(1), match.group(2) or "", match.group(3)
+    if verdict.lower() == "no":
+        return f"{copula}{adverb} not "
+    return f"{copula}{adverb} "
 
 
 _STUTTERED_PHRASE = re.compile(r"\b(\w+(?:\s+\w+){2,})\s+\1\b", re.IGNORECASE)
