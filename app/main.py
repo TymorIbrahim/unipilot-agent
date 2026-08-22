@@ -46,6 +46,16 @@ written. The work was done and thrown away.
 So the first request in a process is charged for the import; later ones are not,
 because for them the import already happened in someone else's window."""
 
+_MAX_COLD_START_CHARGE_S = 20.0
+"""The most a first request may be charged for its process's import.
+
+Measured cold start is ~13s (18.2s cold against 5.0s warm), so 20 covers it with
+room. The bound exists because "imported" and "first request arrives" are not the
+same moment: the platform can initialise a function and route to it later, and
+charging the whole gap spends the budget before the run starts. Live, that
+returned "I ran out of time before I could finish that" after 9.3 seconds of a
+45-second budget."""
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 ARCHITECTURE_PNG = _REPO_ROOT / "data" / "architecture.png"
 
@@ -108,7 +118,13 @@ async def post_execute(payload: ExecuteRequest) -> dict[str, Any]:
     global _SERVED_A_REQUEST
     # A cold process is still paying for its import when the request arrives, so
     # the window opened at `_IMPORTED_AT`; a warm one starts here.
-    started_at = _IMPORTED_AT if not _SERVED_A_REQUEST else time.monotonic()
+    #
+    # BOUNDED, because "imported" and "first request" are not the same moment.
+    # The platform can initialise a function and route to it later, and charging
+    # the whole gap spent the budget before the run began: a live request
+    # returned "I ran out of time" after 9.3 seconds of a 45s budget.
+    now = time.monotonic()
+    started_at = max(_IMPORTED_AT, now - _MAX_COLD_START_CHARGE_S) if not _SERVED_A_REQUEST else now
     _SERVED_A_REQUEST = True
 
     settings = get_settings()

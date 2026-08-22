@@ -284,3 +284,45 @@ def test_the_first_request_is_charged_for_the_import(client, stub_agent) -> None
 
     assert first == app.main._IMPORTED_AT, "a cold request's window opens at import"
     assert second > first, "a warm request's window opens when it arrives"
+
+
+def test_a_stale_import_does_not_spend_the_budget_before_the_run(client, stub_agent) -> None:
+    """"Imported" and "first request arrives" are not the same moment.
+
+    The platform can initialise a function and route to it later. Charging the
+    whole gap spent the budget before the run began: a live request came back
+    "I ran out of time before I could finish that" after 9.3 seconds of a
+    45-second budget, having made one tool call.
+
+    So the cold-start charge is bounded. Measured cold start is ~13s; the bound
+    is 20.
+    """
+    import time
+
+    import app.main
+
+    app.main._SERVED_A_REQUEST = False
+    app.main._IMPORTED_AT = time.monotonic() - 600.0  # a process idle ten minutes
+
+    client.post("/api/execute", json={"prompt": "hi"})
+    charged = time.monotonic() - stub_agent.seen["started_at"]
+
+    assert charged <= app.main._MAX_COLD_START_CHARGE_S + 1.0, (
+        "an idle process charged the whole gap to the request's budget"
+    )
+
+
+def test_a_genuine_cold_start_is_still_charged(client, stub_agent) -> None:
+    """The bound must not switch the accounting off -- the ~13s import is real
+    and is what made a run that answered in 48.2s deliver nothing."""
+    import time
+
+    import app.main
+
+    app.main._SERVED_A_REQUEST = False
+    app.main._IMPORTED_AT = time.monotonic() - 12.0  # a normal cold start
+
+    client.post("/api/execute", json={"prompt": "hi"})
+    charged = time.monotonic() - stub_agent.seen["started_at"]
+
+    assert charged >= 11.0, "a real cold start must still come out of the budget"
