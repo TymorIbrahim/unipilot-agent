@@ -265,6 +265,16 @@ COURSE_OFFERINGS = SourceSchema(
             "with `cycle_path: academicYear`, so the rate is 'in how many YEARS did this term "
             "occur' and not 'what share of all offerings were this term'."
         ),
+        "courseNumber": (
+            "COUNTING OFFERINGS PER COURSE OMITS EVERY COURSE THAT HAS NONE. A course with no "
+            "row here has ZERO offerings, and `group` produces no row for it at all -- so a "
+            "ranking built from the grouped result silently drops exactly the rarest courses. "
+            "Asked which remaining mandatory course is offered least often, that answered "
+            "\"00940704, offered 2\" while 00960221, offered 0 times, was not in the running.\n"
+            "     To include them: group the offerings you fetched, then `difference` your "
+            "candidate list against that grouped result on courseNumber. Whatever is left over "
+            "has zero offerings, and if anything is left over IT is the least often offered."
+        ),
     },
     basis=Basis.OFFICIAL_RECORD,
     joins=(("courseNumber", "courses.courseNumber"),),
