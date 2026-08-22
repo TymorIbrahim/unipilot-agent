@@ -657,8 +657,19 @@ def _aggregate(
         return DataDefect(
             index,
             f"{absent} of {len(collection.records)} records carry no value at '{path.dotted}', "
-            f"so '{op}' would report a total over only {len(values)} of them. No edit to this "
-            "pipeline can fix that -- the missing values were never retrieved.",
+            f"so '{op}' would report a total over only {len(values)} of them, stamped with the "
+            "confidence of a total over all of them.\n"
+            # The old message ended "No edit to this pipeline can fix that", which
+            # is a dead end: the model read it, had nowhere to go, and spent the
+            # rest of its turns rephrasing. There IS a legal move, and refusing
+            # without naming it is the shape of unfollowable advice this codebase
+            # has now hit four times.
+            f"Two ways forward. `select` the records that HAVE '{path.dotted}' and aggregate "
+            f"those, then say the total covers {len(values)} of "
+            f"{len(collection.records)} -- an explicit partial is honest where a silent one is "
+            "not. Or, if the missing rows are the point (a course with no catalog entry still "
+            "counts toward the degree), report the COUNT instead of the total and say the "
+            "credits of some are unknown.",
         )
 
     if not values:
