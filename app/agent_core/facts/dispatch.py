@@ -376,7 +376,9 @@ async def _interpret(name: str, args: Mapping[str, Any], context: DispatchContex
         )
 
     expect = args.get("expect", "text")
-    kinds = {kind.value: kind for kind in ScalarKind}
+    kinds = _INTERPRETABLE_KINDS
+    if expect == ScalarKind.BOOL.value:
+        return _defect(name, ExpressionDefect(0, _BOOL_IS_NOT_EXTRACTABLE))
     if expect not in kinds:
         return _defect(name, ExpressionDefect(0, f"unknown expect {expect!r}; available: {sorted(kinds)}"))
 
@@ -413,7 +415,9 @@ async def _extract_list(name: str, args: Mapping[str, Any], context: DispatchCon
         )
 
     expect = args.get("expect", "identifier")
-    kinds = {kind.value: kind for kind in ScalarKind}
+    kinds = _INTERPRETABLE_KINDS
+    if expect == ScalarKind.BOOL.value:
+        return _defect(name, ExpressionDefect(0, _BOOL_IS_NOT_EXTRACTABLE))
     if expect not in kinds:
         return _defect(name, ExpressionDefect(0, f"unknown expect {expect!r}; available: {sorted(kinds)}"))
 
@@ -838,6 +842,32 @@ async def _plan_term(name: str, args: Mapping[str, Any], context: DispatchContex
         )
     return facts
 
+
+_INTERPRETABLE_KINDS = {
+    kind.value: kind for kind in ScalarKind if kind is not ScalarKind.BOOL
+}
+"""What `interpret` and `extract_list` may be asked for.
+
+BOOL is excluded because it cannot pass their own guard. Every extracted value
+must APPEAR in the passage it cites -- that is the whole grounding of the prose
+side -- and "True" appears in no regulation. The kind was advertised anyway, so
+a model asking a page a yes/no question got:
+
+    interpretation of 'regulations-undergraduate' returned True, which does not
+    appear in the passage
+
+19 times across the measured runs, the largest single cause of wasted turns
+after the wrong-KIND refusal. A tool that offers an option its own validator
+must reject is a trap, not a capability."""
+
+_BOOL_IS_NOT_EXTRACTABLE = (
+    'expect "bool" is not available here, and would not work if it were: every extracted value '
+    "must APPEAR in the passage, and \"True\" never does. A yes/no about a page is a JUDGEMENT, "
+    "not an extraction. Pull the governing PHRASE instead -- expect \"text\", e.g. \"a mandatory "
+    "course with a failing last grade may be re-registered with no time limit\" -- and say yes or "
+    "no in your own words around it. Only NUMBERS have to be slots; a verdict you have read does "
+    "not."
+)
 
 _SLOT_IN_TEXT = re.compile(r"\{(\w+)\}")
 
