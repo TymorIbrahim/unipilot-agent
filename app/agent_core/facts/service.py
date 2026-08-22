@@ -196,9 +196,23 @@ async def _profile_of(database: Any, user_id: str) -> Any:
     hat.
     """
     rows = await database.fetch(
-        'select "userId", "programType", "programSlug", "catalogYear", '
-        '"currentSemesterCode", "maxCreditsPerSemester" '
-        'from student_profiles where "userId" = $1',
+        'select p."userId", p."programType", p."programSlug", p."catalogYear", '
+        'p."currentSemesterCode", p."maxCreditsPerSemester", '
+        # The credit standing, in the query that was already running. Every
+        # question about credits, remaining work or graduation timing needed
+        # these three numbers and spent one to two turns per run deriving them:
+        # find degree_programs, find completed, sum creditsCounted, subtract.
+        # At ~15s a turn against a 60s ceiling that is a quarter of the budget
+        # to learn something one join already knew.
+        'd."totalCredits" as "creditsRequired", '
+        'coalesce(t.done, 0) as "creditsCompleted" '
+        "from student_profiles p "
+        'left join degree_programs d on d."_id" = p."degreeId" '
+        "left join lateral ("
+        '    select sum(cc."creditsCounted") as done from completed_courses cc'
+        '    where cc."userId" = p."userId" and cc."passed"'
+        ") t on true "
+        'where p."userId" = $1',
         user_id,
     )
     return rows[0] if rows else None
@@ -230,17 +244,35 @@ basis and a completeness the loop can reason about rather than as a fact that
 appeared from nowhere.
 """
 
-SEEDED_FACT_NAMES: frozenset[str] = frozenset(
+_CREDIT_STANDING_FACTS: frozenset[str] = frozenset(
+    {"credits_completed", "credits_required", "credits_needed"}
+)
+
+IDENTITY_FACTS: frozenset[str] = frozenset(
     {"me"} | {fact_name for _column, fact_name, _kind in _SEEDED_PROFILE_FIELDS}
 )
+"""Seeded facts that say WHO is asking, not what the run found out.
+
+Repeating these back is the question restated: a partial answer reading "max
+credits per semester: 18" tells a student something they were never asking
+about, and a live partial did exactly that."""
+
+SEEDED_FACT_NAMES: frozenset[str] = IDENTITY_FACTS | _CREDIT_STANDING_FACTS
 """Every fact the ROUTE puts in the context before the loop's first turn.
 
-Derived from the tuple above rather than listed again, because the last time
-these two were kept separately they drifted: `run_loop` decided whether a
-decline was honest by testing `name != "me"`, this list grew by four, and the
-agent quietly lost the ability to decline anything at all -- an out-of-scope
-question ran three turns and came back "I wasn't able to work that out from
-your records." Adding a seeded field must not be able to break that again."""
+Derived from the tuples above rather than listed again, because the last time
+these were kept separately they drifted: `run_loop` decided whether a decline
+was honest by testing `name != "me"`, this list grew by four, and the agent
+quietly lost the ability to decline anything at all -- an out-of-scope question
+ran three turns and came back "I wasn't able to work that out from your
+records." Adding a seeded field must not be able to break that again.
+
+Split from `IDENTITY_FACTS` because the two callers want different things. The
+decline guard asks "did the model FETCH anything", so everything seeded belongs
+here. A partial answer asks "what did the run ESTABLISH", and the credit
+standing is worth reporting there even though it was seeded -- "you have
+completed 129.5 of 155 credits" is a real partial answer, where the student's
+own id is not."""
 
 
 def _seed_profile_facts(context: Any, profile: Any) -> None:
@@ -252,6 +284,62 @@ def _seed_profile_facts(context: Any, profile: Any) -> None:
             value=Scalar(kind, float(value) if kind is ScalarKind.QUANTITY else str(value)),
             basis=Basis.OFFICIAL_RECORD,
             derivation="from the student's profile, read when the run started",
+        )
+    _seed_credit_standing(context, profile)
+
+
+def _seed_credit_standing(context: Any, profile: Any) -> None:
+    """Credits required, completed, and the gap between them.
+
+    A DELIBERATE reversal of the rule above it, which says answer-bearing facts
+    stay behind a tool call so they arrive with a basis and a completeness the
+    loop can reason about. Two things changed since that was written.
+
+    The ceiling turned out to be 60s rather than the 300s this project believed
+    it had, so a turn is now a twentieth of the whole request. Deriving these
+    three numbers cost one to two turns of every credit question -- find
+    degree_programs, find completed, sum `creditsCounted`, subtract -- and they
+    come free in the profile query that already runs.
+
+    And `remaining` is the word this domain gets wrong most often: it has meant
+    the credits still to EARN and the credits still on OFFER in different runs of
+    the same question, differing by a factor of two, and each confusion has cost
+    a defect. Deriving the gap ONCE, in SQL, is what stops it being derived two
+    ways.
+
+    The rule's actual concern is traceability, and it is preserved: each fact
+    carries the basis and a derivation naming the columns it came from, so the
+    answer layer renders "25.5 (degree_programs.totalCredits minus completed
+    credits)" exactly as it would for a fact the model fetched itself.
+
+    Absent beats invented, as ever -- a student whose degree has no
+    `totalCredits` gets `credits_completed` alone and the model can still work
+    the rest out.
+    """
+    required = profile["creditsRequired"] if "creditsRequired" in profile.keys() else None
+    completed = profile["creditsCompleted"] if "creditsCompleted" in profile.keys() else None
+
+    if completed is not None:
+        context.facts["credits_completed"] = HeldFact(
+            value=Scalar(ScalarKind.QUANTITY, float(completed)),
+            basis=Basis.OFFICIAL_RECORD,
+            derivation="sum of completed_courses.creditsCounted over passed rows",
+        )
+    if required in (None, ""):
+        return
+    context.facts["credits_required"] = HeldFact(
+        value=Scalar(ScalarKind.QUANTITY, float(required)),
+        basis=Basis.OFFICIAL_RECORD,
+        derivation="degree_programs.totalCredits for this student's degree",
+    )
+    if completed is not None and float(required) > float(completed):
+        context.facts["credits_needed"] = HeldFact(
+            value=Scalar(ScalarKind.QUANTITY, float(required) - float(completed)),
+            basis=Basis.OFFICIAL_RECORD,
+            derivation=(
+                "degree_programs.totalCredits minus completed credits -- the credits still to "
+                "EARN, which is NOT the credits of the courses still on offer in the track"
+            ),
         )
 
 
@@ -336,10 +424,10 @@ def _not_worth_reporting() -> frozenset[str]:
     single line "max credits per semester: 18" -- seeded before the first turn,
     and presented as what the run had established.
 
-    Derived from `SEEDED_FACT_NAMES` rather than repeated, for the same reason
-    that set exists: the last two copies of this list drifted apart and took the
-    decline path with them."""
-    return SEEDED_FACT_NAMES
+    `IDENTITY_FACTS`, not `SEEDED_FACT_NAMES`: the credit standing is seeded too
+    and IS worth reporting -- "you have completed 129.5 of 155 credits" is a real
+    partial answer, where the student's own id is not."""
+    return IDENTITY_FACTS
 
 
 def _partial_from_facts(result: LoopResult) -> str | None:

@@ -458,6 +458,11 @@ class TestSeededFactsAreNotFetchedFacts:
             "catalog_year": Scalar(Q, 2025.0),
             "current_semester": Scalar(ScalarKind.IDENTIFIER, "2025-2"),
             "max_credits_per_semester": Scalar(Q, 18.0),
+            # The credit standing, seeded from the same profile query since the
+            # 60s ceiling made a turn a twentieth of the whole request.
+            "credits_completed": Scalar(Q, 129.5),
+            "credits_required": Scalar(Q, 155.0),
+            "credits_needed": Scalar(Q, 25.5),
         }
         assert set(values) == set(SEEDED_FACT_NAMES), "the real seeded set changed"
         return values

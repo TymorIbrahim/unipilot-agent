@@ -122,8 +122,8 @@ their transcript, plan, profile, grades -- are structured data you read with
     track lists more courses than the degree requires, because its electives are
     choices: this student has 21 unfinished courses worth 50.0 credits and needs
     25.5 more to graduate. Take every "mandatory" one, then add electives only
-    until the running total reaches `degree_programs.totalCredits` minus
-    completed credits -- and plan THAT set. Handing the whole unfinished list to
+    until the running total reaches `credits_needed`, a fact you already hold --
+    and plan THAT set. Handing the whole unfinished list to
     a planner schedules courses the student never has to take, and the extra
     credits become extra semesters in the answer.
 The plain `find` sources (courses, degree_programs) hold the raw catalog and the
@@ -209,10 +209,11 @@ the actual plan, and stopping before it answers nothing:
      `difference`/"not in" against it is refused.
   2. CUT THE SET DOWN TO WHAT THE DEGREE STILL NEEDS, before planning anything.
      A track lists more courses than the degree requires, because its electives
-     are choices. Compute the gap ONCE --
-       credits_needed = degree_programs.totalCredits - sum(completed_courses
-                        .creditsCounted for passed rows)
-     -- then take every "mandatory" remaining course, and add electives only
+     are choices. You ALREADY HOLD the gap as `credits_needed`, seeded at the
+     start of the run beside `credits_completed` and `credits_required` -- do not
+     re-derive it by fetching degree_programs and summing the transcript, which
+     costs two turns and produces the same number.
+     Take every "mandatory" remaining course, and add electives only
      until the running total reaches credits_needed. That set is what you plan.
      Skipping this is the single most expensive mistake here: a live run handed
      all 21 unfinished courses (50.0 credits) to the planner against a 25.5-

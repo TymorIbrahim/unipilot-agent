@@ -112,3 +112,46 @@ class TestTheOtherOutcomesAreUnchanged:
         result = LoopResult(outcome="declined", reason="Not about your studies.",
                             facts=_facts(completed_credits=Scalar(Q, 129.5)))
         assert to_advice(result).answer == "Not about your studies."
+
+
+class TestTheCreditStandingIsSeededButWorthReporting:
+    """`SEEDED_FACT_NAMES` and `IDENTITY_FACTS` split because their two callers
+    want different things.
+
+    The decline guard asks "did the model FETCH anything", so everything the
+    route seeded belongs outside it -- including the credit standing, or a
+    weather question would look like it had records in hand.
+
+    A partial answer asks "what did the run ESTABLISH", and there the credit
+    standing is exactly what a student wants when the clock ran out. "You have
+    completed 129.5 of 155 credits, 25.5 to go" is a real answer to part of the
+    question; "your id is 6a578a..." is not.
+    """
+
+    def test_the_credit_standing_survives_into_a_partial(self) -> None:
+        advice = to_advice(_exhausted(
+            credits_completed=Scalar(Q, 129.5),
+            credits_required=Scalar(Q, 155.0),
+            credits_needed=Scalar(Q, 25.5),
+        ))
+        assert "129.5" in advice.answer
+        assert "155" in advice.answer
+        assert "25.5" in advice.answer
+
+    def test_identity_is_still_excluded_beside_it(self) -> None:
+        advice = to_advice(_exhausted(
+            me=Scalar(I, "6a578a2da43a2cfe1bcc791c"),
+            max_credits_per_semester=Scalar(Q, 18.0),
+            credits_needed=Scalar(Q, 25.5),
+        ))
+        assert "25.5" in advice.answer
+        assert "6a578a" not in advice.answer
+        assert "18" not in advice.answer
+
+    def test_identity_alone_is_still_not_a_partial(self) -> None:
+        from app.agent_core.facts.service import IDENTITY_FACTS, SEEDED_FACT_NAMES
+
+        assert IDENTITY_FACTS < SEEDED_FACT_NAMES, "the credit standing is seeded too"
+        advice = to_advice(_exhausted(
+            me=Scalar(I, "6a578a"), max_credits_per_semester=Scalar(Q, 18.0)))
+        assert advice.answer == _COULD_NOT_ANSWER

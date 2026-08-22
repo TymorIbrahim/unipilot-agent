@@ -543,10 +543,11 @@ def _prompt(
     # costs one line and saves the model inferring what to filter by.
     whose = (
         "  (`me` is the id of the student asking -- filter their records by it.\n"
-        "   Any other fact above with no derivation came from their profile and is "
-        "ALREADY YOURS:\n"
-        "   re-fetching `student_profiles` to get it costs two turns and tells you "
-        "nothing new.)\n"
+        "   EVERY fact listed above is ALREADY YOURS, seeded before your first turn:\n"
+        "   the profile fields AND the credit standing (`credits_completed`,\n"
+        "   `credits_required`, `credits_needed`). Re-fetching `student_profiles` or\n"
+        "   `degree_programs` to get one, or summing the transcript to recompute the\n"
+        "   gap, costs two turns and returns the same number.)\n"
         if "me" in context.facts
         else ""
     )
