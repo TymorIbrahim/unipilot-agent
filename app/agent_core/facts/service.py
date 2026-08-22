@@ -407,10 +407,24 @@ def _answer_text(result: LoopResult) -> str:
     return _partial_from_facts(result) or _COULD_NOT_ANSWER
 
 
-_PARTIAL_PREFIX = (
-    "I ran out of time before I could finish that, but here is what I established "
-    "from your records:"
-)
+_PARTIAL_PREFIX_BY_OUTCOME = {
+    "exhausted": "I ran out of time before I could finish that, but here is what I established "
+                 "from your records:",
+    "refused": "I could not put the whole answer together with confidence, but here is what I "
+               "established from your records:",
+    "stalled": "I stopped making progress on that, but here is what I established from your "
+               "records:",
+}
+"""Why the run did not finish, said accurately.
+
+Every partial used to open "I ran out of time", whatever had happened. Measured:
+a run that reached its answer in three turns and was REFUSED told the student it
+had run out of time, at 15.5 seconds of a 240-second budget. The sentence was a
+claim about a cause, and the system knew it to be false.
+
+A small thing, and exactly the kind this project is about: the outcome is right
+there in the result, and asserting a different one is the same error as any
+other confident wrong number."""
 _PARTIAL_SUFFIX = (
     "Ask me for one piece at a time -- a single term's plan, or just the number of "
     "semesters -- and I can finish it."
@@ -460,7 +474,10 @@ def _partial_from_facts(result: LoopResult) -> str | None:
     if not scalars:
         return None
     lines = [f"- {name.replace('_', ' ')}: {_render_scalar(held.value)}" for name, held in scalars]
-    return "\n".join([_PARTIAL_PREFIX, *lines, "", _PARTIAL_SUFFIX])
+    prefix = _PARTIAL_PREFIX_BY_OUTCOME.get(
+        result.outcome, _PARTIAL_PREFIX_BY_OUTCOME["refused"]
+    )
+    return "\n".join([prefix, *lines, "", _PARTIAL_SUFFIX])
 
 
 def _render_scalar(value: Scalar) -> str:

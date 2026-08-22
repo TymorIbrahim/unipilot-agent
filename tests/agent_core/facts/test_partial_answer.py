@@ -155,3 +155,42 @@ class TestTheCreditStandingIsSeededButWorthReporting:
         advice = to_advice(_exhausted(
             me=Scalar(I, "6a578a"), max_credits_per_semester=Scalar(Q, 18.0)))
         assert advice.answer == _COULD_NOT_ANSWER
+
+
+class TestItSaysWhyItStopped:
+    """Every partial used to open "I ran out of time", whatever had happened.
+
+    Measured: a policy question was REFUSED after three turns and told the
+    student it had run out of time, at 15.5 seconds of a 240-second budget. The
+    sentence asserts a cause, the result carries the real one, and they
+    disagreed.
+
+    Small, and exactly the kind of thing this project is about -- a confident
+    claim the system already knows to be false is the same error whether it is a
+    number or a reason.
+    """
+
+    def _answer(self, outcome: str) -> str:
+        result = LoopResult(outcome=outcome, reason="x",
+                            facts=_facts(credits_needed=Scalar(Q, 25.5)))
+        return to_advice(result).answer
+
+    def test_a_spent_budget_says_so(self) -> None:
+        assert "ran out of time" in self._answer("exhausted")
+
+    def test_a_refusal_does_not_claim_a_timeout(self) -> None:
+        answer = self._answer("refused")
+        assert "ran out of time" not in answer
+        assert "with confidence" in answer
+
+    def test_a_stall_does_not_claim_a_timeout(self) -> None:
+        answer = self._answer("stalled")
+        assert "ran out of time" not in answer
+        assert "stopped making progress" in answer
+
+    def test_every_outcome_still_reports_what_it_held(self) -> None:
+        for outcome in ("exhausted", "refused", "stalled"):
+            assert "25.5" in self._answer(outcome)
+
+    def test_an_unknown_outcome_does_not_invent_a_timeout(self) -> None:
+        assert "ran out of time" not in self._answer("something_new")
