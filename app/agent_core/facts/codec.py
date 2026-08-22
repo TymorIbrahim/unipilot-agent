@@ -410,13 +410,40 @@ def parse_predicate(payload: Any) -> Predicate:
                 "'in' needs a list of values, or a collection you hold: "
                 '{"fact": "my_courses", "field": "courseId"}.'
             )
-        return Comparison(_path(payload["path"]), op, tuple(_scalar(v, kind) for v in value))
+        return Comparison(
+            _path(payload["path"]), op,
+            tuple(_scalar(*_unwrap_literal(v, kind)) for v in value),
+        )
 
     if isinstance(value, Mapping) and "path" in value:
         # Comparing one field to another rather than to a literal.
         return Comparison(_path(payload["path"]), op, _path(value["path"]))
 
+    value, kind = _unwrap_literal(value, kind)
     return Comparison(_path(payload["path"]), op, _scalar(value, kind))
+
+
+def _unwrap_literal(value: Any, kind: Any) -> tuple[Any, Any]:
+    """`{"value": 90}` and `{"value": 90, "kind": "quantity"}` mean the literal 90.
+
+    Two grammars spelled a literal two ways. In a `compute` expression a literal
+    IS `{"value": 90}` -- that is the only way to write one, because a bare
+    number there would be an ungrounded typed digit. In a predicate it was a
+    bare `90`, and the wrapped form fell through to `_scalar`, which was handed
+    a dict and could not type it.
+
+    The error then made it unrecoverable. It said "give an explicit 'kind'", so
+    the model wrote `{"kind": "quantity", "value": 90}` -- and `kind` is read
+    from the PREDICATE level, not from inside the value, so the same message
+    came back telling it to do what it had just done. Live, on "how many credits
+    at each grade level", that cost six turns and the run returned nothing.
+
+    Accepting the wrapped form makes one literal spelling work in both places,
+    which is what a model that has just written a `compute` expression expects.
+    """
+    if isinstance(value, Mapping) and "value" in value and "fact" not in value:
+        return value["value"], value.get("kind", kind)
+    return value, kind
 
 
 def _scalar(value: Any, kind: Any = None) -> Scalar:
@@ -439,6 +466,16 @@ def _scalar(value: Any, kind: Any = None) -> Scalar:
         return Scalar(ScalarKind.QUANTITY, value)
     if isinstance(value, str):
         return Scalar(ScalarKind.IDENTIFIER, value)
+    if isinstance(value, Mapping):
+        # Reached only by a shape `_unwrap_literal` did not recognise. Saying
+        # "give an explicit 'kind'" here sent a model that had ALREADY nested one
+        # round the same loop six times, because `kind` is read beside the value,
+        # never inside it.
+        raise ParseError(
+            f"a value cannot be the object {value!r}. Write the literal itself (90, "
+            '"00940224"), or {"value": 90} to be explicit, or {"fact": "name"} to compare '
+            "against something you hold. A 'kind' sits BESIDE the value, not inside it."
+        )
     raise ParseError(
         f"cannot type {value!r} ({type(value).__name__}); give an explicit 'kind' of {sorted(_KINDS)}."
     )
