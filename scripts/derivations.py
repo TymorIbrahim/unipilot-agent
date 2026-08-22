@@ -320,13 +320,29 @@ def track_course_rows(
 
 
 _MANDATORY_HEADING = re.compile(
-    r"^\s*(required\s+courses|semester\s*\d+|מקצועות\s+חובה|סמסטר\s)", re.IGNORECASE
-)
-_ELECTIVE_HEADING = re.compile(
-    r"^\s*(faculty\s+elective|elective|group\s*\d+|chain\s*[a-z]\b"
-    r"|בחירה|קבוצה\s|שרשרת)",
+    r"required\s+courses?|mandatory|semester\s*\d+"
+    r"|מקצועות\s+חובה|קורסי\s+חובה|סמסטר\s",
     re.IGNORECASE,
 )
+_ELECTIVE_HEADING = re.compile(
+    r"elective|specialization\s+group|group\s*\d+|chain\s*[a-z]\b"
+    r"|בחירה|קבוצת?\s|שרשרת|התמחות",
+    re.IGNORECASE,
+)
+"""Searched ANYWHERE in the heading, not anchored to its start.
+
+Anchoring was costing whole tracks. Data & Information Engineering lists its
+options under "DNE Elective Course List" -- the keyword is there, three words in
+-- so 75 of its 105 courses had no category, the planner fell back to the wiki
+route, and "Plan my next semester" for that student gave up after 214s. The same
+miss hit "Semester-by-Semester Course Table (Required Courses)", "Mandatory
+Courses — Semester-by-Semester", "Social Sciences Electives (...)", "Free
+Elective — Recommended" and "קורסי חובה לפי סמסטר", which uses a different noun
+for "courses" than the one the pattern knew.
+
+Read off all 67 track pages rather than imagined -- and the same reading is what
+turned up the reason unanchoring cannot simply be switched on: see
+`section_category`."""
 
 
 def section_category(heading: str) -> str | None:
@@ -338,11 +354,32 @@ def section_category(heading: str) -> str | None:
     "Chain A:" beneath. Anything else -- "Notes & Important Rules", "Program
     Overview" -- is None rather than a guess, because a course named in prose
     there is a reference and not membership.
+
+    A heading carrying BOTH vocabularies is None too, and that is the whole
+    reason the keywords can be searched rather than anchored. Ten headings in the
+    corpus say both things and mean it:
+
+        Mandatory Electives Built into Plan
+        Required Choices — Mandatory Electives
+        Semester 7 (Spring — Electives Only)
+        Year 1 — Semester 1 (24.0 חובה / 25.0 כולל בחירה)
+        רשימת מקצועות חובה/בחירה (Required/Elective List)
+
+    Order alone cannot resolve those: checking mandatory first calls an elective
+    list mandatory, which makes a planner treat a choice as compulsory and plan
+    terms the student does not owe; checking elective first does the reverse and
+    lets a required course be dropped. Neither is a reading of the page. So they
+    stay NULL, visibly, and fall back to the wiki route for that track only --
+    the same call the rest of this function has always made.
     """
     title = (heading or "").strip().lstrip("#").strip()
-    if _MANDATORY_HEADING.match(title):
+    mandatory = bool(_MANDATORY_HEADING.search(title))
+    elective = bool(_ELECTIVE_HEADING.search(title))
+    if mandatory and elective:
+        return None
+    if mandatory:
         return "mandatory"
-    if _ELECTIVE_HEADING.match(title):
+    if elective:
         return "elective"
     return None
 
