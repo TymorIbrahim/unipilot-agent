@@ -59,3 +59,45 @@ class TestThePlanningRuleSurvives:
     def test_it_reaches_the_prompt(self) -> None:
         rendered = render_sources(DispatchContext(schemas=REGISTRY))
         assert "IT IS NOT THE RULE" in rendered
+
+
+class TestTheWarningReachesTheTurnPromptToo:
+    """The field note alone did not change the answer, and the reason matters.
+
+    The model never runs a `find` on `student_profiles` -- the cap is SEEDED, so
+    it is already in "FACTS YOU HOLD" before turn one. It answers from there and
+    never reads the source list where the note lives. Re-measured after adding
+    the note: still "Your per-semester maximum is 18 credits", now in one step
+    and zero tool calls.
+
+    Seeding the facts is what bypassed the note, so the warning has to sit
+    beside the seeded facts.
+    """
+
+    def _prompt(self) -> str:
+        from app.agent_core.facts.answer import HeldFact
+        from app.agent_core.facts.dispatch import DispatchContext
+        from app.agent_core.facts.loop import _prompt
+        from app.agent_core.facts.types import Basis, Scalar, ScalarKind
+
+        context = DispatchContext(facts={
+            "me": HeldFact(value=Scalar(ScalarKind.IDENTIFIER, "6a57"),
+                           basis=Basis.OFFICIAL_RECORD),
+            "max_credits_per_semester": HeldFact(
+                value=Scalar(ScalarKind.QUANTITY, 18.0), basis=Basis.OFFICIAL_RECORD),
+        })
+        return _prompt("how many credits am I allowed?", context, [])
+
+    def test_the_turn_prompt_says_the_seeded_facts_are_not_the_rules(self) -> None:
+        assert "not the rules" in self._prompt()
+
+    def test_it_names_the_route_to_the_rules(self) -> None:
+        assert "search_corpus" in self._prompt()
+
+    def test_it_carries_the_measurement(self) -> None:
+        prompt = self._prompt()
+        assert "18" in prompt and "29" in prompt
+
+    def test_the_seeded_facts_are_still_described_as_already_held(self) -> None:
+        """The warning must not crowd out the reason the block exists."""
+        assert "ALREADY YOURS" in self._prompt()

@@ -570,7 +570,12 @@ def _prompt(
         "   the profile fields AND the credit standing (`credits_completed`,\n"
         "   `credits_required`, `credits_needed`). Re-fetching `student_profiles` or\n"
         "   `degree_programs` to get one, or summing the transcript to recompute the\n"
-        "   gap, costs two turns and returns the same number.)\n"
+        "   gap, costs two turns and returns the same number.\n"
+        "   They describe THIS STUDENT, not the rules. `max_credits_per_semester` is\n"
+        "   what a plan for them may contain; what a student is ALLOWED, or must do,\n"
+        "   or has until, is in the regulations -- `search_corpus` for it. Asked what\n"
+        "   load is permitted, answering 18 from this list reported a personal\n"
+        "   setting as institutional policy; the regulations say 29.)\n"
         if "me" in context.facts
         else ""
     )
