@@ -353,10 +353,10 @@ SIX MISTAKES THAT STALL A LONG DERIVATION (seen repeatedly -- avoid them):
      turn is lost. When a step is new or uncertain -- a difference on real data, an
      `extract_list` or other prose read, the `plan_term` call -- run it ALONE, SEE
      it work, THEN build on it next turn. Do NOT try to run all the recipe steps in
-     one reply: the wiki type-classification (step 6) and the `plan_term` call
-     (step 7) are the two that most often need a second attempt, so land each and
-     confirm it before chaining the rest onto it. Batch only steps you are already
-     confident in.
+     one reply: the difference that produces the remaining set (step 5) and the
+     `plan_term` call (step 7) are the two that most often need a second attempt,
+     so land each and confirm it before chaining the rest onto it. Batch only
+     steps you are already confident in.
   3. PROJECTING A FIELD SOME RECORDS LACK. `project` fails if the field is absent
      on ANY record. For a difference or a semi-join you only need the KEY, so
      project just `courseNumber` -- not grade, gradePoints or credits, which some

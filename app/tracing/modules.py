@@ -72,10 +72,13 @@ ANSWER_BOUNDARY: Final = Module(
 
 ANSWER_VERIFY: Final = Module(
     "AnswerVerify",
-    "Replays a finished answer's own numbers against deterministic post-conditions "
-    "— no impossible grade, no out-of-range GPA, and a plan's minimums must hold "
-    "when its courses are taken together. Catches the answer that is correctly "
-    "sourced but still wrong. Deterministic — no model call.",
+    "Replays a finished answer's own numbers against deterministic post-conditions: "
+    "no impossible grade or out-of-range GPA; a plan's minimums must hold when its "
+    "courses are taken together; no term over the student's credit cap; a plan must "
+    "not schedule further past the degree's remaining requirement than the "
+    "requirement itself allows; and a count of semesters must state the credits it "
+    "was derived from. Catches the answer that is correctly sourced but still wrong. "
+    "Deterministic — no model call.",
     calls_llm=False,
 )
 
