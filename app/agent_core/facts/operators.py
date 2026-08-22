@@ -119,6 +119,20 @@ class ArithOp(Enum):
     # absence is why the negative-min-grade answers had no arithmetic way out.
     MAX = "max"
     MIN = "min"
+    # ceil(left / right) -- how many WHOLE periods cover a quantity. The same
+    # kind of hole MAX filled, found the same way: `check_periods_are_whole`
+    # refuses "1.42 semesters" and the system prompt orders the count be derived
+    # as ceil(credits needed / cap), and the algebra could divide but never round
+    # up. A live run wrote {"ceil": [{"div": [...]}]}, got "expression must be
+    # {'path': ...}", then spent four turns trying `compare`, an `answer` TOOL
+    # that does not exist, and finally shipped max(7.39, 8) -- a typed guess that
+    # happened to be one term too many. Every instruction the model was following
+    # was correct; the operation simply was not there.
+    #
+    # BINARY, because the whole expression tree is, and because the division is
+    # the point: a bare ceiling is `ceil_div(x, 1)`, which is how the unary
+    # spelling parses.
+    CEIL_DIV = "ceil_div"
     # Comparisons, which produce a BOOL rather than a quantity. Their absence
     # was a hole the eligibility question fell into every time: "am I eligible"
     # is `met_groups >= required_groups`, the grammar could add and subtract the

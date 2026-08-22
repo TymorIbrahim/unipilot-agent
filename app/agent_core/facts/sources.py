@@ -206,8 +206,10 @@ STUDENT_PROFILES = SourceSchema(
         "maxCreditsPerSemester": (
             "this student's own per-semester credit limit, and the ONLY cap that applies to "
             "them -- a plan over it is refused.\n"
-            "     DERIVE \"how many semesters to graduate\" FROM IT: ceil(credits still needed / "
-            "this), rounded UP because a semester cannot be part-taken. Do NOT answer it by "
+            "     DERIVE \"how many semesters to graduate\" FROM IT with the `ceil_div` "
+            "operator: {\"ceil_div\": [{\"fact\": \"credits_needed\"}, {\"fact\": "
+            "\"max_credits_per_semester\"}]}, which rounds UP because a semester cannot be "
+            "part-taken. Do NOT answer it by "
             "counting the distinct terms a plan came back with -- that number is decided by how "
             "many terms you ASKED the planner for, not by the data, so asking for six returns a "
             "longer degree than asking for two. Two live runs on identical records answered "

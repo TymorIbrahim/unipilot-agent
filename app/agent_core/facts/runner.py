@@ -15,6 +15,7 @@ Two properties the runner owes its caller:
 
 from __future__ import annotations
 
+import math
 from types import MappingProxyType
 
 from collections.abc import Callable, Mapping, Sequence
@@ -548,6 +549,7 @@ def _apply_scalar(
         ArithOp.DIVIDE: current.value / right.value if right.value else 0,
         ArithOp.MAX: max(current.value, right.value),
         ArithOp.MIN: min(current.value, right.value),
+        ArithOp.CEIL_DIV: math.ceil(current.value / right.value) if right.value else 0,
         ArithOp.GTE: current.value >= right.value,
         ArithOp.GT: current.value > right.value,
         ArithOp.LTE: current.value <= right.value,
@@ -738,6 +740,7 @@ def _eval_scalar(
         ArithOp.DIVIDE: left_value.value / right_value.value if right_value.value else 0,
         ArithOp.MAX: max(left_value.value, right_value.value),
         ArithOp.MIN: min(left_value.value, right_value.value),
+        ArithOp.CEIL_DIV: math.ceil(left_value.value / right_value.value) if right_value.value else 0,
         ArithOp.GTE: left_value.value >= right_value.value,
         ArithOp.GT: left_value.value > right_value.value,
         ArithOp.LTE: left_value.value <= right_value.value,

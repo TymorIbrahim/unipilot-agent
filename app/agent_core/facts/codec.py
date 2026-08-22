@@ -66,7 +66,20 @@ _ARITH = {
     "eq": ArithOp.EQ, "==": ArithOp.EQ, "equals": ArithOp.EQ,
     "max": ArithOp.MAX, "maximum": ArithOp.MAX,
     "min": ArithOp.MIN, "minimum": ArithOp.MIN,
+    # ceil(a / b). The unary spellings take ONE operand and are folded to
+    # ceil(x / 1) below, because a model asked to "round up" reaches for
+    # {"ceil": [expr]} far more readily than for a division that also rounds --
+    # and a live run did exactly that, four times, against a grammar that had
+    # neither.
+    "ceil_div": ArithOp.CEIL_DIV, "divide_round_up": ArithOp.CEIL_DIV,
+    "ceil": ArithOp.CEIL_DIV, "ceiling": ArithOp.CEIL_DIV, "round_up": ArithOp.CEIL_DIV,
 }
+
+_UNARY_FOLDS_TO_ONE = frozenset({"ceil", "ceiling", "round_up"})
+"""Spellings that take a single operand, completed as `op(x, 1)`.
+
+`ceil(x)` is exactly `ceil(x / 1)`, so the unary form needs no unary node and
+the expression tree stays binary throughout."""
 
 _KINDS = {kind.value: kind for kind in ScalarKind}
 
@@ -314,10 +327,24 @@ def _scalar_expression(payload: Any, pipeline: str, index: int) -> ScalarExpr:
     for key, operator in _ARITH.items():
         if key in payload:
             operands = payload[key]
-            if not isinstance(operands, Sequence) or isinstance(operands, (str, bytes)) or len(operands) != 2:
+            if not isinstance(operands, Sequence) or isinstance(operands, (str, bytes)):
+                raise ParseError(
+                    f"{pipeline} stage {index}: '{key}' needs a list of operands, got a non-list."
+                )
+            # `{"ceil": [x]}` is the natural way to write a ceiling and is
+            # completed to ceil(x / 1), which is the same number. Without this
+            # the model's first, correct instinct parses as an arity error and
+            # it goes looking for an operator that does not exist.
+            if len(operands) == 1 and key in _UNARY_FOLDS_TO_ONE:
+                return Arith(
+                    op=operator,
+                    left=_scalar_expression(operands[0], pipeline, index),
+                    right=Literal(_scalar(1, None)),
+                )
+            if len(operands) != 2:
                 raise ParseError(
                     f"{pipeline} stage {index}: '{key}' needs exactly two operands, got "
-                    f"{len(operands) if isinstance(operands, Sequence) else 'a non-list'}."
+                    f"{len(operands)}."
                 )
             return Arith(
                 op=operator,
