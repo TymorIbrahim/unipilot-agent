@@ -445,11 +445,15 @@ REMAINING_COURSES = SourceSchema(
             "courseNumber mix-up silently reports every course as still remaining."
         ),
         "credits": (
-            "from the catalog. Their SUM IS NOT what the student still needs: a track lists "
-            "more courses than the degree requires, because its electives are choices. This "
-            "student has 50.0 credits of unfinished courses and needs 25.5. For how much is "
-            "LEFT use `degree_programs.totalCredits` minus completed credits; use these to "
-            "pick WHAT to take."
+            "from the catalog, for picking WHAT to take. NEVER SUM THEM TO GET WHAT IS LEFT: a "
+            "track lists more courses than the degree requires, because its electives are "
+            "choices. This student has 50.0 credits of unfinished courses and needs 25.5 -- the "
+            "gap is `credits_needed`, a fact you already hold.\n"
+            "     THAT INCLUDES A PROJECTED GPA. Asked what their GPA becomes if they score 85 "
+            "in everything remaining, the sum here gives (129.5*74.45 + 50.0*85)/179.5 = 77.39, "
+            "and the answer is 76.19: the student graduates at 155 credits, not 179.5, so the "
+            "credits still to earn are 25.5. Weight a projection by `credits_needed` and divide "
+            "by `credits_required`."
         ),
         "category": (
             "\"mandatory\" or \"elective\". Take every mandatory one, then add electives only "

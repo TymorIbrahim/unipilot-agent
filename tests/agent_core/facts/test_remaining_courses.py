@@ -51,11 +51,20 @@ class TestTheNotesSteerAwayFromTheOldRoute:
         assert "START PLANNING QUESTIONS HERE" in note
 
     def test_the_credits_note_repeats_the_two_meanings_of_remaining(self) -> None:
-        """`remaining` means two things and the confusion has now cost three
+        """`remaining` means two things and the confusion has now cost four
         separate defects, so the warning travels with the column."""
         note = REMAINING_COURSES.field_notes["credits"]
         assert "50.0" in note and "25.5" in note
-        assert "totalCredits" in note
+        assert "credits_needed" in note
+
+    def test_the_credits_note_covers_the_projected_gpa(self) -> None:
+        """The fourth time, and this source made it easier to reach: asked what
+        their GPA becomes at 85 in everything remaining, the agent summed these
+        credits and answered 77.39 -- exactly (129.5*74.45 + 50.0*85)/179.5.
+        The student graduates at 155 credits, so the answer is 76.19."""
+        note = REMAINING_COURSES.field_notes["credits"]
+        assert "77.39" in note and "76.19" in note
+        assert "credits_required" in note
 
     def test_the_category_note_says_how_to_bound_the_set(self) -> None:
         note = REMAINING_COURSES.field_notes["category"]
