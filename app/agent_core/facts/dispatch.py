@@ -808,7 +808,24 @@ async def _plan_term(name: str, args: Mapping[str, Any], context: DispatchContex
     except InternalApiClientError as error:
         return _defect(name, DataDefect(0, f"the plan service could not build the plan: {error.detail}"))
 
-    return _fact(name, _placed_collection(result), Basis.SIMULATED, derivation=_plan_summary(result))
+    # TWO facts: the placed courses, and the per-term totals. The second is
+    # returned because the model was spending a whole turn rebuilding it --
+    # `distinct on term`, then `select term == "winter"`, then sum credits --
+    # from rows the planner had just grouped. Measured on three live runs, every
+    # one paid one to two turns for it, at ~15s a turn against a 60s ceiling.
+    #
+    # Named off the caller's own `as`, so a plan called `plan` is summarised as
+    # `plan_by_term` and the pairing is guessable rather than something to look
+    # up.
+    facts = _fact(name, _placed_collection(result), Basis.SIMULATED, derivation=_plan_summary(result))
+    summary = _term_totals(result)
+    if summary is not None:
+        facts.facts[f"{name}_by_term"] = HeldFact(
+            value=summary,
+            basis=Basis.SIMULATED,
+            derivation="one row per term of the plan, with its course count and credit total",
+        )
+    return facts
 
 
 _SLOT_IN_TEXT = re.compile(r"\{(\w+)\}")
@@ -1101,3 +1118,39 @@ _HANDLERS = {
 
 
 __all__ = ["DispatchContext", "Dispatched", "dispatch"]
+
+
+def _term_totals(result: Mapping[str, Any]) -> "Collection | None":
+    """One row per term of the plan: its code, course count and credit total.
+
+    The arithmetic the answer needs and the model was paying a turn to redo.
+    Built from the same `placedCourses` the plan itself is built from, so the
+    two cannot disagree -- which a model-side regrouping could, and did: a live
+    run selected `term == "winter"` against a plan holding two winters and
+    reported their sum as one 23-credit term.
+
+    None when the planner placed nothing, because a summary of no terms is not a
+    fact about the plan, it is an empty collection that reads as "no semesters".
+    """
+    rows: list[Record] = []
+    for term in result.get("terms") or []:
+        placed = term.get("placedCourses") or []
+        if not placed:
+            continue
+        rows.append(Record(
+            fields={
+                "term": Scalar(ScalarKind.IDENTIFIER, str(term.get("semesterCode") or "")),
+                "courses": Scalar(ScalarKind.QUANTITY, float(len(placed))),
+                "credits": Scalar(
+                    ScalarKind.QUANTITY,
+                    float(sum(float(course.get("credits") or 0) for course in placed)),
+                ),
+            },
+            basis=Basis.SIMULATED,
+        ))
+    if not rows:
+        return None
+    return Collection(
+        records=tuple(rows),
+        completeness=Completeness(complete=True, total=len(rows)),
+    )

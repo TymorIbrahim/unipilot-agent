@@ -239,11 +239,16 @@ the actual plan, and stopping before it answers nothing:
      credit cap and the no-additional-credit rule, and FLAGS an unmet prerequisite
      rather than guessing. Give `max_credits` only to OVERRIDE the
      student's own per-semester cap; omit it and their cap (or the standard load)
-     applies. It returns the courses actually PLACED as one collection -- each row
-     carrying `term`, `credits`, `category`, `courseTitle` and `prereqStatus` --
-     and THAT is the plan. Run it ALONE and see it land before building on it: this
-     one call replaces the old offerings -> semi-join -> optimize -> split
-     hand-wiring, so there is nothing to place or join by hand around it.
+     applies. It returns TWO facts. `<as>` is the courses actually PLACED, one row
+     each carrying `term`, `credits`, `category`, `courseTitle` and
+     `prereqStatus` -- and THAT is the plan. `<as>_by_term` is the per-term
+     summary, one row per term with its `courses` count and `credits` total,
+     already grouped: slot it directly and do NOT rebuild it with distinct /
+     select term == "winter" / sum, which costs a turn and once merged two
+     winters into one 23-credit term. Run plan_term ALONE and see it land before
+     building on it: this one call replaces the old offerings -> semi-join ->
+     optimize -> split hand-wiring, so there is nothing to place or join by hand
+     around it.
   4. COMPLETE THE DERIVATION, then answer -- these are different acts. Keep
      deriving across as many replies as it takes. Do NOT write the {answer} until
      `plan_term` has produced the plan AND every fact the answer will use (gpa,
