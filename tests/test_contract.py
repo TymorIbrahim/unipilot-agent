@@ -326,3 +326,42 @@ def test_a_genuine_cold_start_is_still_charged(client, stub_agent) -> None:
     charged = time.monotonic() - stub_agent.seen["started_at"]
 
     assert charged >= 11.0, "a real cold start must still come out of the budget"
+
+
+class TestTheGuiIsServedByTheAppItself:
+    """The spec asks for a GUI at the root URL, in BOTH environments.
+
+    Vercel serves `public/` from its CDN before a request reaches the function,
+    so the requirement was met in production and nowhere else: running the app
+    locally, every `/api/*` route answered and `/` was a 404. A GUI that only
+    exists once deployed cannot be exercised before deploying, which is exactly
+    what "make sure it works on your development environment" is asking for.
+    """
+
+    def test_the_root_url_serves_the_gui(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        response = TestClient(app).get("/")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+
+    def test_the_gui_has_what_the_spec_requires(self) -> None:
+        from fastapi.testclient import TestClient
+
+        from app.main import app
+
+        page = TestClient(app).get("/").text
+        assert "<textarea" in page.lower()
+        assert "Run Agent" in page
+        assert "/api/execute" in page
+
+    def test_the_mount_does_not_shadow_the_api(self) -> None:
+        """Mounted last for this reason -- a catch-all at `/` must not win."""
+        from fastapi.testclient import TestClient
+
+        client = TestClient(__import__("app.main", fromlist=["app"]).app)
+        for path in ("/api/team_info", "/api/agent_info", "/api/health"):
+            assert client.get(path).status_code == 200, path
+        assert client.get("/api/model_architecture").headers["content-type"] == "image/png"

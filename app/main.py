@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.agent_info import agent_info
@@ -58,6 +59,9 @@ returned "I ran out of time before I could finish that" after 9.3 seconds of a
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 ARCHITECTURE_PNG = _REPO_ROOT / "data" / "architecture.png"
+_PUBLIC_DIR = _REPO_ROOT / "public"
+"""The GUI Vercel serves from its CDN in production, and the app serves itself
+in development -- see the mount in `create_app`."""
 
 router = APIRouter(prefix="/api")
 
@@ -208,6 +212,22 @@ def create_app() -> FastAPI:
             "supabase": settings.supabase_configured(),
             "pinecone": settings.pinecone_configured(),
         }
+
+    # The GUI, served by the app itself so `/` works where the app runs.
+    #
+    # In production Vercel serves `public/` from its CDN before a request ever
+    # reaches this function, so the spec's "GUI on your root url" was satisfied
+    # there and nowhere else: run the app locally and `/` was a 404, while every
+    # `/api/*` route answered. The spec asks for BOTH environments to work, and
+    # a GUI that only exists once deployed cannot be exercised before deploying.
+    #
+    # Mounted LAST so it can never shadow an API route, and only when the
+    # directory is actually present -- a missing GUI is a build problem, and
+    # failing to start over it would take the four endpoints down with it.
+    if _PUBLIC_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=_PUBLIC_DIR, html=True), name="gui")
+    else:  # pragma: no cover -- only in a build that dropped the asset
+        logger.warning("no GUI at %s; '/' will 404 in this environment", _PUBLIC_DIR)
 
     return app
 
