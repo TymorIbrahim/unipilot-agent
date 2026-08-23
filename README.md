@@ -19,9 +19,18 @@ a failure mode this agent has.
 | `POST` | `/api/execute` | `{status, error, response, steps}` |
 | `GET` | `/api/health` | Configuration readiness |
 
-`POST /api/execute` takes `{"prompt": "..."}` and optionally `{"student_id": "..."}`. When no
-student is named it answers for the primary demo student, so the bare `{"prompt": ...}` form
-works on its own.
+`POST /api/execute` takes `{"prompt": "..."}` and optionally `{"student_id": "..."}` and
+`{"conversation_id": "..."}`. When no student is named it answers for the primary demo
+student, so the bare `{"prompt": ...}` form works on its own. A `conversation_id` threads
+follow-ups: the prior exchanges are loaded so "how many credits is that in total?" resolves,
+while the FACTS are re-derived every run, so an answer is always grounded in live records
+rather than a snapshot.
+
+The same four fields come back on success and on failure, so a caller never has to branch on
+shape — only on `status`.
+
+Questions can be asked in **English or Hebrew**, and the answer follows the question's
+language, including the course names.
 
 **`steps`** is the full trace: every LLM call the agent made, in order, each with the module
 that made it, the exact system and user prompts it sent, and the raw reply it got back. The
@@ -67,8 +76,46 @@ cp .env.example .env      # then fill in the credentials
 uvicorn app.main:app --reload --port 8000
 ```
 
-Open <http://localhost:8000/api/health> to check configuration, and serve `public/index.html`
-for the UI.
+Then open <http://localhost:8000/> for the UI and <http://localhost:8000/api/health> to check
+configuration. The app serves the interface itself, so the development and production
+environments behave the same — in production Vercel's CDN answers `/` first, and locally
+FastAPI does.
+
+### Models
+
+Both are served by LLMod, and the embedding model is pinned regardless of the chat provider
+because the Pinecone index was built with it — querying that index with a different embedder
+returns results that are meaningless rather than absent.
+
+| Role | Model |
+|---|---|
+| Chat | `MB5R2CF-azure/gpt-5.4-mini` |
+| Embedding | `MB5R2CF-azure/text-embedding-3-small` |
+
+`GET /api/health` reports `chat_provider` and `submission_ready`, because running on the
+wrong provider has no other symptom: the agent answers just as well and only the billing
+shows it.
+
+## Evaluation
+
+The agent is scored against answers derived from the data — by SQL and by reading the
+corpus — never by asking the agent. Comparing runs to each other proves only consistency,
+and this agent was once consistently wrong about credits across five identical runs.
+
+```bash
+python evaluation/run_eval.py           # 9 questions x 3 repeats, vs evaluation/ground_truth.json
+python evaluation/cross_student.py      # the core questions for EVERY student, truth from SQL
+python evaluation/challenge_policy.py   # the regulations path (search -> interpret -> cite)
+python evaluation/challenge_hebrew.py   # the same questions asked in Hebrew
+python scripts/verify_submission.py     # every graded requirement, over HTTP, against the live URL
+```
+
+`run_eval.py` runs the agent **in process**, so it measures the code and reads the local
+`.env`. `verify_submission.py` is the only one that tests the deployed artifact, which is
+why it is the one to trust about configuration.
+
+`cross_student.py` derives each expected figure from Postgres at run time rather than storing
+it, so it cannot go stale when the data is re-seeded.
 
 ## Deployment
 
