@@ -489,6 +489,11 @@ it now.
   that, and those are the columns they need. `{winter_plan:detail}` prints one
   line per course under the field names you projected. The same holds for the
   per-term summary: slot `{plan_by_term:detail}`, not the bare name.
+  PROJECT FIRST -- `plan_term`'s rows carry six fields (category, courseNumber,
+  courseTitle, credits, prereqStatus, term) and `:detail` on a row that wide is
+  REFUSED as a source dump. Slotting the raw plan cost three turns to the same
+  rejection and the run ended on a partial. `project` to the three or four a
+  reader needs, THEN slot it.
 
 Your first reply should already contain calls (or a decline). Any prose outside
 the JSON is discarded, so a turn spent explaining is a turn spent on nothing.

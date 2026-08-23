@@ -38,6 +38,17 @@ RATE_LIMIT_ATTEMPTS = 4
 COOLDOWN_S = 45.0
 SPACING_S = 8.0
 
+RUN_TIMEOUT_S = 300.0
+"""A hard ceiling on ONE run, so a stalled call cannot take the suite with it.
+
+The agent enforces its own 240s budget, so anything past this is not the agent
+deciding to stop -- it is a request that never came back. Without the bound a
+single hung connection blocked the whole evaluation indefinitely: three separate
+runs today sat at 0% CPU on question two, which reads as "the eval is slow" and
+is actually "the eval is never finishing". A timed-out run is recorded as the
+failure it is and the suite moves on, which is strictly more information than a
+suite that never reports at all."""
+
 
 def score(answer: str | None, question: dict) -> tuple[str, str]:
     """(verdict, why) for one answer, judged by the shared checks.
@@ -86,7 +97,13 @@ async def run_once(prompt: str, student_id: str) -> Run:
 
     for _attempt in range(RATE_LIMIT_ATTEMPTS):
         started = time.monotonic()
-        result = await run_agent(prompt, student_id=student_id)
+        try:
+            result = await asyncio.wait_for(
+                run_agent(prompt, student_id=student_id), timeout=RUN_TIMEOUT_S
+            )
+        except asyncio.TimeoutError:
+            return Run(None, [], f"run exceeded {RUN_TIMEOUT_S:g}s and was abandoned",
+                       time.monotonic() - started)
         error = str(result.error or "")
         if "RateLimit" in error or "429" in error:
             await asyncio.sleep(COOLDOWN_S)
