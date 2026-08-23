@@ -323,6 +323,27 @@ async def run_loop(
                 return result
             # The reason goes back, so the retry differs from its predecessor.
             observations.append(f"Your answer was refused: {verdict.reason}")
+            # On a FOLLOW-UP the generic reason is not enough. The model reads
+            # its own earlier answer in the conversation, sees the figure it
+            # needs, finds no fact holding it, and reports the absence:
+            #     "I can't derive the plan total from the structured facts I
+            #      hold right now, because the semester plan itself is only
+            #      present in the conversation text and not as a tool-derived
+            #      fact."
+            # True about the machinery and useless to the student. Facts are
+            # deliberately re-derived every run so a follow-up is grounded in
+            # live records rather than a snapshot, which means the earlier
+            # answer is a QUESTION to re-answer, not evidence to cite. Said
+            # here rather than in the system prompt because the prompt has been
+            # asked twice and the turn is still spent; a reason delivered at the
+            # moment of failure is the one that lands.
+            if history and not _grounded_in_anything(verdict.reason):
+                observations.append(
+                    "This is a FOLLOW-UP. The facts behind your earlier answer are gone by "
+                    "design -- every run re-derives from live records. So do not report that "
+                    "they are missing: call the same tools again and rebuild the figure the "
+                    "question refers to."
+                )
             continue
 
         calls: Sequence[Mapping[str, Any]] = reply.get("calls") or ()
@@ -482,6 +503,16 @@ def _report_progress(on_progress: "Callable[[str], None]", reply: Mapping[str, A
 def _is_empty(value: Any) -> bool:
     records = getattr(value, "records", None)
     return records is not None and len(records) == 0
+
+
+def _grounded_in_anything(reason: str) -> bool:
+    """Whether a refusal was about something OTHER than holding no facts.
+
+    Narrow on purpose: the follow-up nudge is only useful for the one shape it
+    addresses, and pinning it to every rejection would bury the specific reason
+    under boilerplate.
+    """
+    return "stands on no facts at all" not in (reason or "")
 
 
 def _call_signatures(call: Mapping[str, Any]) -> tuple[str, ...]:

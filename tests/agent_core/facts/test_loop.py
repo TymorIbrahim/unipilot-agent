@@ -660,3 +660,40 @@ class TestAnsweringIsAReplyShapeNotATool:
                                {"answer": "You have {count} courses."})
         result = await run_loop("q", model, _context(count=Scalar(Q, 3.0)))
         assert result.outcome == "answered"
+
+
+class TestAFollowUpIsToldToReDerive:
+    """The generic "no facts" reason is not enough on a follow-up.
+
+    The model reads its own earlier answer in the conversation, sees the figure
+    the question refers to, finds no fact holding it, and reports the absence:
+
+        "I can't derive the plan total from the structured facts I hold right
+         now, because the semester plan itself is only present in the
+         conversation text and not as a tool-derived fact."
+
+    True about the machinery and useless to the student. Facts are deliberately
+    re-derived every run so a follow-up is grounded in live records rather than
+    a snapshot -- which makes the earlier answer a question to re-answer, not
+    evidence to cite. Live, that cost a turn on every follow-up: refused, then
+    the right tools on the next turn.
+
+    Said at the moment of failure rather than in the system prompt, because the
+    prompt was asked twice and the turn was still spent.
+    """
+
+    def test_the_nudge_is_scoped_to_the_no_facts_refusal(self) -> None:
+        from app.agent_core.facts.loop import _grounded_in_anything
+
+        assert not _grounded_in_anything("the answer stands on no facts at all. Even a ...")
+
+    def test_another_refusal_does_not_get_it(self) -> None:
+        """Pinning it to every rejection would bury the specific reason."""
+        from app.agent_core.facts.loop import _grounded_in_anything
+
+        for reason in (
+            "'plan' is rendered with :detail but its records carry 6 fields",
+            "the answer states a number that came from no fact",
+            "the answer refers to 'x', which is not a held fact.",
+        ):
+            assert _grounded_in_anything(reason), reason
