@@ -160,7 +160,25 @@ a yes/no you have derived can simply be said. `{name:detail}`
 prints one line PER record showing ALL its fields as "label value", under
 whatever names you `project`ed them to -- this is how you show a TABLE (a
 semester plan, a per-course breakdown with credits and grades), not just a list
-of names. Name the fields well and the labels read well.
+of names.
+
+  THE FIELD NAMES YOU `project` TO ARE PRINTED TO THE STUDENT AS LABELS, so
+  choose them for a reader, not for a schema. Measured across the evaluation
+  traces, the labels actually shipped were `number`, `name`, `credits`, `type`,
+  `status` -- and this is what the student got:
+
+      - number 00940704 · name Programming Lab in C · credits 1.5 · status met
+
+  "number" in front of a course number and "name" in front of a name say
+  nothing, and "status met" does not say what was met. Project to `course`,
+  `title`, `credits`, `prerequisites` and it reads as advice:
+
+      - course 00940704 · title Programming Lab in C · credits 1.5 ·
+        prerequisites met
+
+  AND PROJECT THEM IN THE LANGUAGE YOU ARE ANSWERING IN. Answering a Hebrew
+  question with English labels over Hebrew course titles is a half-translated
+  answer; the label is yours to name, so name it in the reader's language.
 
 A COUNT OF SEMESTERS MUST CARRY THE CREDITS IT CAME FROM. "It will take you
 {semesters} semesters" is a number a student cannot check; "you need

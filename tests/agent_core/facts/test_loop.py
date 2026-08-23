@@ -139,7 +139,11 @@ class TestFailuresComeBack:
         result = await run_loop("plan winter to keep my GPA above 80", model, context)
 
         assert result.outcome == "answered"
-        assert result.answer.text == "Winter plan: - number 00940412 · credits 4 · min_grade 19.25"
+        # One record, so no list bullet stranded mid-sentence, and the
+        # projected `min_grade` reads as "min grade".
+        assert result.answer.text == (
+            "Winter plan: number 00940412 · credits 4 · min grade 19.25"
+        )
         assert "refused" in model.prompts[1].lower() and "below 0" in model.prompts[1]
 
 

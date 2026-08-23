@@ -424,7 +424,9 @@ class TestDetailRender:
         )
         result = resolve_answer("Winter:\n{plan:detail}", {"plan": _held(plan, Basis.SIMULATED)})
         assert isinstance(result, Answer)
-        for shown in ("courseNumber 0960327", "title Nonlinear OR", "credits 3.5", "type elective"):
+        # Labels are the projected names made readable -- `courseNumber` is
+        # shown to a student as "course number".
+        for shown in ("course number 0960327", "title Nonlinear OR", "credits 3.5", "type elective"):
             assert shown in result.text
 
     def test_one_line_per_record(self) -> None:
@@ -438,8 +440,8 @@ class TestDetailRender:
         result = resolve_answer("{plan:detail}", {"plan": _held(plan, Basis.SIMULATED)})
         assert isinstance(result, Answer)
         assert [line for line in result.text.split("\n") if line.startswith("- ")] == [
-            "- courseNumber 0960327",
-            "- courseNumber 0940314",
+            "- course number 0960327",
+            "- course number 0940314",
         ]
 
     def test_it_drops_object_ids_so_the_finished_answer_guard_does_not_reject_it(self) -> None:
@@ -458,7 +460,8 @@ class TestDetailRender:
         result = resolve_answer("{plan:detail}", {"plan": _held(plan, Basis.SIMULATED)})
         assert isinstance(result, Answer)
         assert "a" * 24 not in result.text
-        assert "courseNumber 0960327" in result.text
+        # One record, so no list bullet -- see `_render_detail`.
+        assert result.text == "course number 0960327"
 
     def test_a_course_placed_in_two_semesters_is_refused(self) -> None:
         """The faked-split signature from every live planning run: rather than
@@ -608,3 +611,86 @@ class TestNumberRendering:
 
     def test_a_half_credit_keeps_its_meaningful_digit(self) -> None:
         assert resolve_answer("{n} credits", {"n": _held(Scalar(Q, 3.5))}).text == "3.5 credits"
+
+
+class TestLabelsAreWrittenForAReader:
+    """The projected field name is printed to the student, so it is prose.
+
+    The model names fields the way code names identifiers -- `prereqStatus`,
+    `min_grade`, `courseNumber` -- because a fact name IS a code identifier
+    everywhere else in this system. The prompt asks for reader-facing names;
+    across every row in the evaluation traces it got schema-shaped ones.
+
+    So the ask stays in the prompt, where the real fix is, and this is the net
+    under it. Purely typographic: no vocabulary, no domain knowledge, so a
+    field this has never seen still comes out better than it went in.
+    """
+
+    def test_camel_case_is_split(self) -> None:
+        from app.agent_core.facts.answer import _readable_label
+
+        assert _readable_label("prereqStatus") == "prereq status"
+        assert _readable_label("courseNumber") == "course number"
+
+    def test_snake_case_is_split(self) -> None:
+        from app.agent_core.facts.answer import _readable_label
+
+        assert _readable_label("min_grade") == "min grade"
+        assert _readable_label("course_count") == "course count"
+
+    def test_an_acronym_survives(self) -> None:
+        """"gpa" is a downgrade -- the student reads GPA."""
+        from app.agent_core.facts.answer import _readable_label
+
+        assert _readable_label("GPA") == "GPA"
+
+    def test_a_non_ascii_label_is_untouched(self) -> None:
+        """Already in the reader's script; lowercasing it means nothing."""
+        from app.agent_core.facts.answer import _readable_label
+
+        assert _readable_label("ציון") == "ציון"
+
+    def test_an_already_plain_label_is_unchanged(self) -> None:
+        from app.agent_core.facts.answer import _readable_label
+
+        assert _readable_label("credits") == "credits"
+
+
+class TestABulletOnlyAppearsInAList:
+    """A one-row `:detail` is a phrase, and the model writes it into a sentence.
+
+    Live, verbatim: "סה״כ התכנון הוא - term winter · courses 6 · credits 16" --
+    a list bullet stranded mid-clause because a single-term summary rendered as
+    though it were an enumeration.
+    """
+
+    def _one(self, **fields):
+        return Collection(
+            records=(
+                Record(
+                    fields={k: Scalar(ScalarKind.TEXT, v) for k, v in fields.items()},
+                    basis=Basis.SIMULATED,
+                ),
+            ),
+            completeness=Completeness(complete=True, total=1),
+        )
+
+    def test_a_single_record_has_no_bullet(self) -> None:
+        result = resolve_answer(
+            "Total: {summary:detail}",
+            {"summary": _held(self._one(term="winter"), Basis.SIMULATED)},
+        )
+        assert isinstance(result, Answer)
+        assert result.text == "Total: term winter"
+
+    def test_two_records_are_still_a_list(self) -> None:
+        plan = Collection(
+            records=(
+                Record(fields={"term": Scalar(ScalarKind.TEXT, "winter")}, basis=Basis.SIMULATED),
+                Record(fields={"term": Scalar(ScalarKind.TEXT, "spring")}, basis=Basis.SIMULATED),
+            ),
+            completeness=Completeness(complete=True, total=2),
+        )
+        result = resolve_answer("{plan:detail}", {"plan": _held(plan, Basis.SIMULATED)})
+        assert isinstance(result, Answer)
+        assert result.text == "- term winter\n- term spring"

@@ -552,7 +552,17 @@ def _render_detail(value: Collection) -> str:
     dropped, because an internal key is never the thing to show a person (and the
     finished-answer ObjectId guard would reject it anyway).
     """
-    lines = [line for line in (_detail_line(record) for record in value.records) if line]
+    # A ONE-record detail is a phrase, not a list, and the model writes it into
+    # the middle of a sentence -- a single-term summary came out as
+    # "סה״כ התכנון הוא - term winter · courses 6 · credits 16", with a list
+    # bullet stranded mid-clause. Nothing is being enumerated, so nothing needs
+    # a bullet; two or more rows still get one, because then it IS a list.
+    bullet = len(value.records) > 1
+    lines = [
+        line
+        for line in (_detail_line(record, bullet) for record in value.records)
+        if line
+    ]
     if not lines:
         return "(none)"
     if len(lines) > _DETAIL_CAP:
@@ -561,13 +571,39 @@ def _render_detail(value: Collection) -> str:
     return "\n".join(lines)
 
 
-def _detail_line(record: Collection) -> str:
+def _detail_line(record: Collection, bullet: bool = True) -> str:
     parts = [
-        f"{name} {_render_scalar(v)}"
+        f"{_readable_label(name)} {_render_scalar(v)}"
         for name, v in record.fields.items()
         if isinstance(v, Scalar) and name != "_id" and not _OBJECT_ID.fullmatch(str(v.value))
     ]
-    return "- " + " · ".join(parts) if parts else ""
+    if not parts:
+        return ""
+    return ("- " if bullet else "") + " · ".join(parts)
+
+
+_LABEL_SEAM = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _readable_label(name: str) -> str:
+    """A projected field name, as a person would read it.
+
+    The model names the fields, and it names them the way code names
+    identifiers, because a fact name IS a code identifier everywhere else in
+    this system -- `prereqStatus`, `min_grade`, `courseNumber`. The prompt asks
+    for reader-facing names and gets schema-shaped ones, measured across every
+    row in the evaluation traces.
+
+    So the ask stays in the prompt, where the real fix is, and this is the net
+    under it: purely typographic, no vocabulary and no domain knowledge, so a
+    field this has never seen still comes out better than it went in.
+    """
+    spaced = _LABEL_SEAM.sub(" ", name.replace("_", " ")).strip()
+    if spaced.isascii() and not spaced.isupper():
+        return spaced.lower()
+    # An all-caps label is an acronym the student knows -- GPA, not "gpa" --
+    # and a non-ASCII one is already in the reader's own script.
+    return spaced
 
 
 _MAX_DETAIL_FIELDS = 5
