@@ -179,6 +179,28 @@
   }
   .ghost:hover { color: var(--accent); border-color: var(--accent); }
 
+  /* earlier turns of the same conversation, kept visible so a follow-up
+     ("and the one after that?") reads as the follow-up it is */
+  .thread { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+  .exchange {
+    border-left: 2px solid var(--line); padding-left: 14px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .exchange .q {
+    font-size: 13.5px; font-weight: 650; color: var(--muted);
+  }
+  .exchange .a {
+    font-size: 14px; color: var(--muted); white-space: pre-wrap;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .exchange.err .a { color: var(--err); }
+  .threadline {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 10px;
+  }
+  .now { font-size: 13.5px; font-weight: 650; color: var(--ink); margin-bottom: 8px; }
+
   /* the grounding proof */
   .grounding { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); }
   .grounding .lede { font-size: 12px; color: var(--muted); margin-bottom: 9px; }
@@ -298,6 +320,10 @@
   }
   details[open] summary::before { transform: rotate(90deg); }
   summary:hover { color: var(--accent); }
+  .step-what {
+    font-size: 11.5px; color: var(--faint); font-weight: 500; margin-left: auto;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;
+  }
   .step-n {
     font-size: 10.5px; font-weight: 800; color: var(--faint);
     min-width: 18px; font-variant-numeric: tabular-nums;
@@ -354,9 +380,11 @@
     <div class="card-head">
       <h2>Answer</h2>
       <button class="ghost" id="copy" hidden>Copy</button>
+      <button class="ghost" id="reset" hidden>New conversation</button>
       <span class="status" id="status" hidden></span>
     </div>
     <div class="card-body">
+      <div id="thread" hidden></div>
       <div id="answer-slot">
         <div class="placeholder" id="placeholder">
           <div class="big">Nothing yet</div>
@@ -777,6 +805,19 @@ function renderMetrics(steps, seconds) {
     : "Four of the seven modules make no model call at all — the grounding checks are code, not prompts.";
 }
 
+/* One line saying what a step did, for the collapsed trace row. */
+function describeStep(step) {
+  const d = parseDecision(step.response);
+  if (d.kind === "calls") {
+    const tools = d.calls.map((c) => c.tool).filter(Boolean);
+    const unique = [...new Set(tools)];
+    return unique.length ? unique.join(", ") : `${d.calls.length} calls`;
+  }
+  if (d.kind === "answer") return "answered";
+  const text = String(d.text ?? "").trim();
+  return text ? text.slice(0, 40) : "";
+}
+
 /* The spec-required view: module, prompt, response, verbatim and in order. */
 function renderSteps(steps) {
   const host = $("steps");
@@ -793,6 +834,11 @@ function renderSteps(steps) {
     const sum = el("summary");
     sum.appendChild(el("span", "step-n", String(i + 1)));
     sum.appendChild(el("span", null, step.module ?? "(unnamed module)"));
+    // What the call DID, so a row is identifiable without opening it. Every
+    // row said "ReasoningLoop" and nothing else, which made the list a set of
+    // identical doors.
+    const summary = describeStep(step);
+    if (summary) sum.appendChild(el("span", "step-what", summary));
     d.appendChild(sum);
 
     const body = el("div", "step-body");
@@ -838,9 +884,49 @@ function hideInsight() {
   $("grounding").hidden = true;
 }
 
-function showAnswer(text, isError) {
+/* ---------- the conversation ----------
+   The server has always threaded follow-ups: `conversation_id` is sent on every
+   request and the prior exchanges are loaded server-side, so "and the one after
+   that?" already resolved. The page just threw the earlier turns away, which
+   made a working capability invisible -- a follow-up read as a fresh question
+   that had mysteriously understood a pronoun. */
+let THREAD = [];
+let LAST = null;   // the exchange on screen, not yet archived
+
+function renderThread() {
+  const host = $("thread");
+  host.innerHTML = "";
+  if (!THREAD.length) { host.hidden = true; $("reset").hidden = true; return; }
+  host.hidden = false;
+  $("reset").hidden = false;
+  host.className = "thread";
+  host.appendChild(el("div", "threadline", `Earlier in this conversation`));
+  for (const turn of THREAD) {
+    const box = el("div", `exchange${turn.ok ? "" : " err"}`);
+    const q = el("div", "q", turn.q);
+    q.dir = "auto";
+    const a = el("div", "a", turn.a);
+    a.dir = "auto";
+    box.appendChild(q);
+    box.appendChild(a);
+    host.appendChild(box);
+  }
+}
+
+function newConversation() {
+  THREAD = [];
+  try { sessionStorage.removeItem(`unipilot-thread:${selectEl.value || "default"}`); } catch {}
+  renderThread();
+}
+
+function showAnswer(text, isError, question) {
   const slot = $("answer-slot");
   slot.innerHTML = "";
+  if (question) {
+    const q = el("div", "now", question);
+    q.dir = "auto";
+    slot.appendChild(q);
+  }
   const node = el("div", "answer", text);
   node.dir = "auto";           // a Hebrew answer renders right-to-left on its own
   if (isError) node.style.color = "var(--err)";
@@ -879,6 +965,10 @@ async function run() {
   const prompt = $("prompt").value.trim();
   if (!prompt) { $("prompt").focus(); return; }
 
+  // The exchange currently on screen becomes history, so the page shows the
+  // conversation the SERVER is already threading rather than only its last line.
+  if (LAST) { THREAD.push(LAST); LAST = null; renderThread(); }
+
   const btn = $("run"), status = $("status");
   btn.disabled = true;
   btn.innerHTML = "";
@@ -907,11 +997,13 @@ async function run() {
     if (data.status === "ok") {
       status.textContent = `done in ${secs}s`;
       status.className = "status ok";
-      showAnswer(data.response ?? "(empty response)", false);
+      showAnswer(data.response ?? "(empty response)", false, prompt);
+      LAST = { q: prompt, a: data.response ?? "", ok: true };
     } else {
       status.textContent = `error after ${secs}s`;
       status.className = "status err";
-      showAnswer(data.error ?? "Unknown error.", true);
+      showAnswer(data.error ?? "Unknown error.", true, prompt);
+      LAST = { q: prompt, a: data.error ?? "Unknown error.", ok: false };
     }
     const steps = Array.isArray(data.steps) ? data.steps : [];
     renderSteps(steps);
@@ -920,7 +1012,8 @@ async function run() {
   } catch (err) {
     status.textContent = "request failed";
     status.className = "status err";
-    showAnswer(String(err), true);
+    showAnswer(String(err), true, prompt);
+    LAST = null;
     hideInsight();
   } finally {
     clearInterval(tick);
@@ -929,6 +1022,10 @@ async function run() {
   }
 }
 
+$("reset").addEventListener("click", () => { newConversation(); });
+// The server keys history on `student:thread`, so changing student is a
+// different conversation and the visible one would be someone else's.
+selectEl.addEventListener("change", () => { LAST = null; newConversation(); });
 $("run").addEventListener("click", run);
 $("prompt").addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();

@@ -470,6 +470,15 @@ credits. Holding the plan is NOT the answer -- the rendered term lists are. Neve
 end with "if you want, I can take the next step": that step IS the answer, so take
 it now.
 
+  A PLAN IS SLOTTED WITH `:detail`, NEVER BARE. `{winter_plan}` renders ONE
+  readable field per row, run together with commas, and a live plan came back as
+  a six-course paragraph:
+      "Planned courses: 00940704 (...), 00960578 (...), 00960606 (...), ..."
+  A student cannot read the credits, the type or the prerequisite status off
+  that, and those are the columns they need. `{winter_plan:detail}` prints one
+  line per course under the field names you projected. The same holds for the
+  per-term summary: slot `{plan_by_term:detail}`, not the bare name.
+
 Your first reply should already contain calls (or a decline). Any prose outside
 the JSON is discarded, so a turn spent explaining is a turn spent on nothing.
 
