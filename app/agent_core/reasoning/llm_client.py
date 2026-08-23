@@ -14,6 +14,7 @@ emit and no translation table to maintain.
 from __future__ import annotations
 
 import logging
+import re
 from functools import lru_cache
 from typing import Any
 
@@ -36,6 +37,15 @@ def _reasoning_kwargs(*, thinking_enabled: bool, reasoning_effort: str | None) -
     if not reasoning_effort:
         return {}
     return {"reasoning_effort": reasoning_effort}
+
+
+_REFUSES_TEMPERATURE = re.compile(r"gpt-5|o[1-9](?:-|$)", re.IGNORECASE)
+"""Models that accept only their default temperature.
+
+Matched on the model NAME rather than the provider, because the constraint
+belongs to the model: `MB5R2CF-azure/gpt-5.4-mini` and a bare `gpt-5.4-mini`
+are the same model reached two ways, and only one of the two routes enforced
+it."""
 
 
 @lru_cache(maxsize=8)
@@ -61,10 +71,26 @@ def _cached_chat_llm(
 
     kwargs: dict[str, Any] = {
         "model": model,
-        "temperature": temperature,
         "api_key": api_key,
         **_reasoning_kwargs(thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort),
     }
+    # A gpt-5 model REFUSES any temperature but its default, and the two
+    # providers disagree about whether that is an error. OpenAI direct accepted
+    # `temperature=0.0` and ignored it; LLMod routes through LiteLLM, which
+    # returns 400:
+    #
+    #   litellm.UnsupportedParamsError: gpt-5 models don't support
+    #   temperature=0.0. Only temperature=1 is supported.
+    #
+    # Determinism was the reason for sending 0.0 and it was never being honoured
+    # anyway -- the model has one temperature and this was decoration. Omitting
+    # it costs nothing and is the only form that works on both providers.
+    #
+    # Found on the swap to LLMod, one call before deploying it: every
+    # `/api/execute` would have returned 400 on submission day, with the local
+    # suite green because nothing in it makes a live call.
+    if not _REFUSES_TEMPERATURE.search(model):
+        kwargs["temperature"] = temperature
     if base_url:
         kwargs["base_url"] = base_url
     if timeout is not None:
