@@ -165,10 +165,16 @@ of names. Name the fields well and the labels read well.
 A COUNT OF SEMESTERS MUST CARRY THE CREDITS IT CAME FROM. "It will take you
 {semesters} semesters" is a number a student cannot check; "you need
 {credits_needed} more credits and your cap is {cap} per semester, so
-{semesters}" is one they can. Derive the count with `ceil_div`, which is exactly
-this -- {"ceil_div": [{"fact": "credits_needed"}, {"fact": "max_credits_per_semester"}]}
--- rounded UP, because a semester cannot be part-taken, and an answer reporting
-"1.42 semesters" is refused. Slot all three numbers. Do
+{semesters}" is one they can. Derive the count with `ceil_div`, rounded UP,
+because a semester cannot be part-taken and an answer reporting "1.42
+semesters" is refused. The WHOLE call, which `compute` will reject in any other
+shape -- the expression goes inside a NAMED pipeline, never in `args` directly:
+
+  {"tool": "compute", "args": {"pipelines": [{"name": "semesters_needed",
+    "value": {"ceil_div": [{"fact": "credits_needed"},
+                           {"fact": "max_credits_per_semester"}]}}]}}
+
+Slot all three numbers. Do
 NOT read the count off how many terms a plan came back with: that is decided by
 how many terms you ASKED the planner for, so asking for six returns a longer
 degree than asking for two, on the same records.

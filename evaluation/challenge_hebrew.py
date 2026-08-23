@@ -142,7 +142,11 @@ async def main() -> None:
                          "status": result.get("status"), "answer": answer,
                          **stats, "steps_raw": steps})
 
-    OUT.write_text(json.dumps(rows, ensure_ascii=False, indent=2))
+    # A `--only` run writes ALONGSIDE the batch, not over it. Re-asking one
+    # question to check a fix used to overwrite the full set with a single row,
+    # and the batch traces this was all meant to explain were gone.
+    out = OUT if not args.only else OUT.with_name(f"{OUT.stem}_{args.only}.json")
+    out.write_text(json.dumps(rows, ensure_ascii=False, indent=2))
     he = sum(1 for r in rows if r["replied_hebrew"])
     print(f"\n{'=' * 78}\nTOTALS")
     print(f"  {len(rows)} requests, {sum(r['steps'] for r in rows)} steps, "
