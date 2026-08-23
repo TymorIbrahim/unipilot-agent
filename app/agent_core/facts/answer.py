@@ -233,6 +233,28 @@ def resolve_answer(
             "off a collection."
         )
 
+    # A REQUEST FOR CLARIFICATION IS NOT A CLAIM, so there is nothing in it to
+    # ground. Asked "Can I take it next semester?" -- no antecedent anywhere --
+    # the model wrote the right answer five times running:
+    #
+    #     "I can't tell which course you mean. Send the course number, and I'll
+    #      check whether you can take it next semester."
+    #
+    # and the no-facts rule refused all five, after which the run shipped a
+    # partial about credits nobody had asked about. The rule is right about what
+    # it was built for -- "I can't determine X" must not ship as an answer --
+    # and a question is a different kind of sentence: it asserts nothing, so
+    # there is no unsupported assertion to catch.
+    #
+    # Bounded so it cannot become a way to dodge work: it must ASK for
+    # something, and it must carry no digits at all, which keeps every
+    # quantitative claim under the invariant exactly as before.
+    if not used and _is_a_request_for_clarification(filled):
+        return Answer(
+            text=_tidy_affirmations(filled), basis=Basis.OFFICIAL_RECORD,
+            used=(), citations=(), derivations=(),
+        )
+
     if not used:
         return Ungrounded(
             "the answer stands on no facts at all. Even a qualitative answer must cite what it "
@@ -395,6 +417,35 @@ def _detail_inside_a_clause(template: str, slots: "list[str]") -> str:
             continue
         return slot
     return ""
+
+
+_ASKS_FOR_MORE = re.compile(
+    r"\?\s*$"
+    r"|\b(?:send|give|tell|provide|share|specify|name)\b[^.?!]{0,30}\b(?:me\b|the\b|which\b|it\b)"
+    r"|\bwhich (?:course|one|of these)\b"
+    r"|\bwhat (?:course|do you mean)\b"
+    r"|\bאיזה קורס\b|\bשלח\b|\bציין\b|\bתן לי\b|\bלמה אתה מתכוון\b",
+    re.IGNORECASE,
+)
+_CLARIFICATION_MAX_CHARS = 400
+
+
+def _is_a_request_for_clarification(text: str) -> bool:
+    """Whether this answer ASKS for something rather than asserting anything.
+
+    Three conditions, and each is load-bearing. It must ask -- a question mark
+    or an explicit request. It must be SHORT, because a page of prose ending in
+    a question is prose. And it must carry NO DIGITS, which is what keeps this
+    from becoming a hole in the grounding invariant: every quantitative claim
+    still needs a fact behind it, so the worst this can admit is a sentence with
+    no numbers in it, asking the user something.
+    """
+    body = (text or "").strip()
+    if not body or len(body) > _CLARIFICATION_MAX_CHARS:
+        return False
+    if _NUMERAL.search(body):
+        return False
+    return bool(_ASKS_FOR_MORE.search(body))
 
 
 def _did_you_mean(unknown: tuple, facts: Mapping[str, object]) -> str:

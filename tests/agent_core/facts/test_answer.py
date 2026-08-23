@@ -792,3 +792,57 @@ class TestARepeatedNameIsSaidOnce:
         result = resolve_answer("{h:count} passages", {"h": _held(fact, Basis.WIKI_DERIVED)})
         assert isinstance(result, Answer)
         assert result.text == "3 passages"
+
+
+class TestAskingForClarificationIsNotAClaim:
+    """Asked "Can I take it next semester?" -- no antecedent anywhere -- the
+    model wrote the right answer five times running:
+
+        "I can't tell which course you mean. Send the course number, and I'll
+         check whether you can take it next semester."
+
+    and the no-facts rule refused all five, after which the run shipped a
+    partial about credits nobody had asked about. The ground truth for that
+    question is "must ASK, not guess a course", and the system structurally
+    could not ask.
+
+    The rule is right about what it was built for -- "I can't determine X" must
+    not ship as an answer. A question is a different kind of sentence: it
+    asserts nothing, so there is no unsupported assertion to catch.
+    """
+
+    ASKED = "Can I take it next semester?"
+
+    def kind(self, text: str) -> str:
+        return type(resolve_answer(text, {}, self.ASKED)).__name__
+
+    def test_the_answer_that_was_refused_five_times_is_allowed(self) -> None:
+        assert self.kind(
+            "I can’t tell which course you mean. Send the course number, and "
+            "I’ll check whether you can take it next semester."
+        ) == "Answer"
+
+    def test_a_bare_question_is_allowed(self) -> None:
+        assert self.kind("Which course do you mean?") == "Answer"
+
+    def test_hebrew_too(self) -> None:
+        assert self.kind("איזה קורס התכוונת?") == "Answer"
+
+    def test_a_non_answer_dressed_as_prose_is_still_refused(self) -> None:
+        """What the rule was built for, and it must keep working."""
+        assert self.kind(
+            "I can't determine your remaining credits from the facts I hold."
+        ) == "Ungrounded"
+
+    def test_an_assertion_is_still_refused(self) -> None:
+        assert self.kind("You are eligible to take the course.") == "Ungrounded"
+
+    def test_a_question_carrying_a_NUMBER_is_still_refused(self) -> None:
+        """The condition that keeps this from being a hole in the invariant:
+        any digit means a claim, and a claim needs a fact."""
+        assert self.kind(
+            "I can't tell which course you mean, but you need 25.5 credits."
+        ) == "Ungrounded"
+
+    def test_a_page_of_prose_ending_in_a_question_is_not_a_question(self) -> None:
+        assert self.kind("word " * 90 + "which course do you mean?") == "Ungrounded"
