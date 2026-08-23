@@ -118,3 +118,60 @@ class TestTheNameSourceIsActuallyConnected:
     def test_a_non_code_is_not_looked_up(self) -> None:
         for value in ("129.5", "abc", "", "0096032"):
             assert course_display_name(value) is None
+
+
+class TestTheNameFollowsTheQuestionsLanguage:
+    """A Hebrew question deserves the Hebrew course name.
+
+    The wiki title is English and the catalog title is Hebrew, so the sources
+    hold the two languages and the only question is which leads. It used to be
+    a fixed preference for English, which meant a student asking in Hebrew was
+    told they needed "Service Systems Engineering" and had to translate it back
+    before they could find it on their registration page.
+
+    Whichever is not preferred stays the fallback: 2601 courses have a wiki page
+    and 2613 have a catalog row, so each covers gaps in the other, and a name in
+    the wrong language still beats an 8-digit number.
+    """
+
+    BOTH = {"00960324": "הנדסת מערכות שירות"}  # also has an English wiki page
+
+    def test_a_hebrew_answer_prefers_the_hebrew_name(self) -> None:
+        set_catalog_names(self.BOTH)
+        assert pair_codes_with_names("צריך 00960324.", hebrew=True) == (
+            "צריך 00960324 (הנדסת מערכות שירות)."
+        )
+
+    def test_an_english_answer_prefers_the_english_name(self) -> None:
+        set_catalog_names(self.BOTH)
+        assert pair_codes_with_names("You need 00960324.") == (
+            f"You need 00960324 ({WIKI['00960324']})."
+        )
+
+    def test_hebrew_falls_back_to_the_wiki_when_the_catalog_lacks_it(self) -> None:
+        set_catalog_names({})
+        assert course_display_name("00960324", hebrew=True) == WIKI["00960324"]
+
+    def test_english_falls_back_to_the_catalog_when_the_wiki_lacks_it(self) -> None:
+        set_catalog_names({"03240305": "היסטוריה של המדע"})
+        assert course_display_name("03240305") == "היסטוריה של המדע"
+
+    def test_the_answer_seam_reads_the_language_off_the_question(self) -> None:
+        """`_answer_text` is where the two meet, and it is the only place that
+        knows both the question and the finished prose."""
+        from app.agent_core.facts.answer import Answer
+        from app.agent_core.facts.loop import LoopResult
+        from app.agent_core.facts.service import _answer_text
+        from app.agent_core.facts.types import Basis
+
+        set_catalog_names(self.BOTH)
+        for question, expected in (
+            ("צריך קורס?", "הנדסת מערכות שירות"),
+            ("what do I need?", WIKI["00960324"]),
+        ):
+            result = LoopResult(
+                outcome="answered",
+                answer=Answer("00960324", Basis.OFFICIAL_RECORD, (), ()),
+                question=question,
+            )
+            assert expected in _answer_text(result), question

@@ -168,13 +168,23 @@ async def load_catalog_names() -> int:
     return len(_catalog_names)
 
 
-def course_display_name(value: str) -> str | None:
+def course_display_name(value: str, hebrew: bool = False) -> str | None:
     """The course's display name, or None if `value` is not a known course code.
 
-    Wiki first (English), catalog second (usually Hebrew), bare code last.
+    The two sources hold the two languages -- the wiki title is English, the
+    catalog title is Hebrew -- so which one leads is decided by the language the
+    ANSWER is written in, not by a fixed preference. A student who asks in
+    Hebrew and is told they need "Service Systems Engineering" has to translate
+    it back before they can find it on their registration page.
+
+    Whichever is not preferred still serves as the fallback: 2601 courses have
+    a wiki page and 2613 have a catalog row, so each covers gaps in the other,
+    and a name in the wrong language beats an 8-digit number in any case.
     """
     if not _COURSE_CODE.match(value or ""):
         return None
+    if hebrew:
+        return _catalog_names.get(value) or _name_index().get(value)
     return _name_index().get(value) or _catalog_names.get(value)
 
 
@@ -210,7 +220,7 @@ def set_catalog_names(names: dict[str, str]) -> None:
 _ALREADY_NAMED = re.compile(r"\A\s*[（(]")
 
 
-def pair_codes_with_names(text: str) -> str:
+def pair_codes_with_names(text: str, hebrew: bool = False) -> str:
     """Show a course code with its name the first time the answer mentions it.
 
     A live answer, and the reason this exists:
@@ -242,7 +252,7 @@ def pair_codes_with_names(text: str) -> str:
         code = match.group(0)
         if code in seen:
             return code
-        name = course_display_name(code)
+        name = course_display_name(code, hebrew)
         if not name:
             return code
         seen.add(code)

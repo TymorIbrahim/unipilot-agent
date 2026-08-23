@@ -414,7 +414,13 @@ def _answer_text(result: LoopResult) -> str:
     confirmation text of a proposal. Doing it at the one seam they all pass
     through is why it cannot be forgotten on the path nobody was looking at.
     """
-    return pair_codes_with_names(_answer_body(result))
+    # Names follow the question's language: the wiki title is English and the
+    # catalog title is Hebrew, and a student who asked in Hebrew should not have
+    # to translate a course name back before they can find it on their
+    # registration page.
+    return pair_codes_with_names(
+        _answer_body(result), hebrew=bool(_HEBREW.search(result.question or ""))
+    )
 
 
 def _answer_body(result: LoopResult) -> str:
