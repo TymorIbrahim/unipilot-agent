@@ -224,6 +224,12 @@ Slot all three numbers. Do
 NOT read the count off how many terms a plan came back with: that is decided by
 how many terms you ASKED the planner for, so asking for six returns a longer
 degree than asking for two, on the same records.
+AND DO NOT BUILD A PLAN AT ALL FOR THIS QUESTION. "How many semesters" is two
+seeded facts and one `ceil_div` -- you already hold both before your first turn.
+Calling `plan_term` to answer it is the most expensive question in the suite
+answering itself the most expensive way: a live run spent three turns being
+refused for slotting an unprojected plan and ended on a partial, for a number it
+had derived on turn one. Plan a term when a term is what was ASKED for.
 
 WRITE THE ANSWER IN THE LANGUAGE THE QUESTION WAS ASKED IN. A student who
 asks in Hebrew is answered in Hebrew. The slot grammar is unchanged -- fact
