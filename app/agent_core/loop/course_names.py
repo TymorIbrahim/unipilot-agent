@@ -279,6 +279,15 @@ def set_catalog_names(names: dict[str, str]) -> None:
     _catalog_names = dict(names)
 
 
+_NOT_IN_CATALOG = ("not in the course catalog", "לא נמצא בקטלוג")
+"""Said of a code the prerequisite graph names and the catalog does not.
+
+NOT an error and not a guess: the edge is real, the course is genuinely
+referenced as a requirement, and nothing about it can be looked up. A student
+told "you need 00940226" and nothing else cannot tell whether the agent failed
+or the data did."""
+
+
 _ALREADY_NAMED = re.compile(r"\A\s*[（(]")
 
 
@@ -308,6 +317,11 @@ def pair_codes_with_names(text: str, hebrew: bool = False) -> str:
     body = text or ""
     if not body:
         return body
+    # Only claim a course is absent from the catalog when the catalog is
+    # actually LOADED. If the index failed to fill, every code would be
+    # labelled unknown -- turning a loading failure into 2613 false statements
+    # about the curriculum. Silence is the correct degradation.
+    catalog_known = bool(_catalog_names) or bool(_name_index())
     seen: set[str] = set()
 
     def name_it(match: "re.Match[str]") -> str:
@@ -316,7 +330,16 @@ def pair_codes_with_names(text: str, hebrew: bool = False) -> str:
             return code
         name = course_display_name(code, hebrew)
         if not name:
-            return code
+            # Named by the prerequisite graph and absent from the catalog: 768
+            # of 4766 edges point at 259 such codes. The agent can offer no
+            # name, credits or offerings for them, and printing a bare number
+            # beside fully-described courses reads as though it were one of
+            # them. Saying so is the honest render -- it tells the student the
+            # limit is in the data, not in what they asked.
+            if not catalog_known:
+                return code
+            seen.add(code)
+            return f"{code} ({_NOT_IN_CATALOG[1] if hebrew else _NOT_IN_CATALOG[0]})"
         seen.add(code)
         line_start = body.rfind("\n", 0, match.start()) + 1
         line_end = body.find("\n", match.end())

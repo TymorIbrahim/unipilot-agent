@@ -78,10 +78,13 @@ class TestPairingTheCodeWithItsName:
         row = f"- course 00960324 · title {WIKI['00960324']} · credits 3"
         assert pair_codes_with_names(row) == row
 
-    def test_a_code_with_no_known_name_is_untouched(self) -> None:
-        assert pair_codes_with_names("00999999 is not in the catalog.") == (
-            "00999999 is not in the catalog."
-        )
+    def test_a_code_with_no_known_name_is_never_given_one(self) -> None:
+        """The rule is that no name is INVENTED. What the code gets instead is
+        the honest note that the catalog does not have it -- see
+        `TestACourseTheCatalogDoesNotHave`."""
+        out = pair_codes_with_names("00999999 is unknown.")
+        assert "00999999" in out
+        assert "not in the course catalog" in out
 
     def test_numbers_that_are_not_course_codes_are_untouched(self) -> None:
         """Credits, grades and GPAs must never be looked up as courses."""
@@ -108,12 +111,15 @@ class TestTheNameSourceIsActuallyConnected:
         dead, and nothing raising to say so."""
         assert course_display_name("00960324") == WIKI["00960324"]
 
-    def test_a_course_in_neither_source_stays_a_bare_code(self) -> None:
+    def test_a_course_in_neither_source_has_no_name_to_give(self) -> None:
         """00940226 is named by 259 prerequisite edges and sits in no catalog row
-        and no wiki page -- a gap in the DATA. A bare code is the honest render;
-        an invented name would be worse, because nothing about it invites doubt."""
+        and no wiki page -- a gap in the DATA. An invented name would be worse
+        than none, because nothing about it invites doubt; what it gets is the
+        gap said out loud."""
         assert course_display_name("00940226") is None
-        assert pair_codes_with_names("It requires 00940226.") == "It requires 00940226."
+        assert pair_codes_with_names("It requires 00940226.") == (
+            "It requires 00940226 (not in the course catalog)."
+        )
 
     def test_a_non_code_is_not_looked_up(self) -> None:
         for value in ("129.5", "abc", "", "0096032"):
@@ -175,3 +181,51 @@ class TestTheNameFollowsTheQuestionsLanguage:
                 question=question,
             )
             assert expected in _answer_text(result), question
+
+
+class TestACourseTheCatalogDoesNotHave:
+    """768 of 4766 prerequisite edges point at 259 codes with no catalog row.
+
+    The edge is real -- the course genuinely IS named as a requirement -- and
+    nothing about it can be looked up: no name, no credits, no offerings. Printed
+    as a bare number beside fully-described courses it reads as if it were one of
+    them, and a student told "you need 00940226" and nothing else cannot tell
+    whether the agent failed or the data did.
+
+    That is a gap in the seeded data rather than in this module, so it is
+    SURFACED, not repaired. An invented name would be worse than none.
+    """
+
+    def test_an_uncatalogued_prerequisite_says_so(self) -> None:
+        set_catalog_names(dict(CATALOG_ONLY))
+        assert pair_codes_with_names("It requires 00940226.") == (
+            "It requires 00940226 (not in the course catalog)."
+        )
+
+    def test_it_says_so_in_hebrew_too(self) -> None:
+        set_catalog_names(dict(CATALOG_ONLY))
+        assert pair_codes_with_names("נדרש 00940226.", hebrew=True) == (
+            "נדרש 00940226 (לא נמצא בקטלוג)."
+        )
+
+    def test_a_known_course_is_unaffected(self) -> None:
+        set_catalog_names(dict(CATALOG_ONLY))
+        assert "not in the course catalog" not in pair_codes_with_names(
+            "It requires 00960324."
+        )
+
+    def test_nothing_is_claimed_when_the_catalog_did_not_load(self, monkeypatch) -> None:
+        """The failure mode that would matter: an index that failed to fill
+        would otherwise make 2613 false statements about the curriculum."""
+        import app.agent_core.loop.course_names as module
+
+        set_catalog_names({})
+        monkeypatch.setattr(module, "_name_index", lambda: {})
+        assert module.pair_codes_with_names("It requires 00940226.") == (
+            "It requires 00940226."
+        )
+
+    def test_only_the_first_mention_is_flagged(self) -> None:
+        set_catalog_names(dict(CATALOG_ONLY))
+        out = pair_codes_with_names("00940226 blocks you; take 00940226 later.")
+        assert out.count("not in the course catalog") == 1
