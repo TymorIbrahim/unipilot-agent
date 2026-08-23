@@ -49,7 +49,7 @@
     -webkit-font-smoothing: antialiased;
   }
   code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .wrap { max-width: 940px; margin: 0 auto; padding: 40px 20px 96px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
 
   /* ---------- header ---------- */
   header { text-align: center; margin-bottom: 26px; }
@@ -219,21 +219,25 @@
   .fill .arrow { color: var(--faint); }
   .fill .v { font-weight: 650; }
 
-  /* ---------- inspector tabs ---------- */
-  .tabs { display: flex; gap: 4px; padding: 10px 12px 0; flex-wrap: wrap; }
-  .tab {
-    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-    background: transparent; color: var(--muted); border: 0;
-    border-radius: 9px 9px 0 0; padding: 9px 14px; position: relative;
-    transition: color .15s, background .15s;
+  /* ---------- inspector ----------
+     These four panes were behind tabs, which bought space the page did not need
+     -- 940px wide with dead margins either side, showing one pane at a time and
+     charging a click for the other three. Wider container, two columns where
+     they fit, everything visible at once. */
+  .inspect { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 900px) { .inspect { grid-template-columns: 1.45fr 1fr; } }
+  .pane { min-width: 0; }
+  .pane.wide { grid-column: 1 / -1; }
+  .pane > h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); margin: 0 0 11px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
   }
-  .tab:hover { color: var(--ink); background: var(--sunk); }
-  .tab[aria-selected="true"] { color: var(--accent); background: var(--accent-soft); }
-  .tab .n {
-    font-size: 11px; font-weight: 700; color: var(--faint); margin-left: 6px;
+  .pane > h3 .n {
+    font-size: 10.5px; font-weight: 700; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 1px 8px;
   }
-  .tab[aria-selected="true"] .n { color: var(--accent); }
-  .tabline { height: 1px; background: var(--line-soft); }
+  .scroller { max-height: 420px; overflow-y: auto; padding-right: 4px; }
 
   /* ---------- modules strip ---------- */
   .pipeline { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 9px; }
@@ -396,34 +400,33 @@
   </div>
 
   <div class="card" id="inspector" hidden>
-    <div class="tabs" role="tablist" id="tabs">
-      <button class="tab" role="tab" id="tab-reasoning" aria-controls="pane-reasoning" aria-selected="true">Reasoning<span class="n" id="n-turns"></span></button>
-      <button class="tab" role="tab" id="tab-facts" aria-controls="pane-facts" aria-selected="false">Facts<span class="n" id="n-facts"></span></button>
-      <button class="tab" role="tab" id="tab-modules" aria-controls="pane-modules" aria-selected="false">Modules</button>
-      <button class="tab" role="tab" id="tab-cost" aria-controls="pane-cost" aria-selected="false">Cost</button>
-    </div>
-    <div class="tabline"></div>
     <div class="card-body">
-      <div id="pane-reasoning" role="tabpanel" aria-labelledby="tab-reasoning">
-        <div class="turns" id="turns"></div>
-      </div>
-      <div id="pane-facts" role="tabpanel" aria-labelledby="tab-facts" hidden>
-        <div class="ledger" id="ledger"></div>
-        <div class="note">
-          Provenance travels with each fact. A value derived from weaker inputs can never
-          come back stronger than the weakest one it was built from.
+      <div class="inspect">
+        <div class="pane">
+          <h3>Reasoning <span class="n" id="n-turns"></span></h3>
+          <div class="scroller"><div class="turns" id="turns"></div></div>
         </div>
-      </div>
-      <div id="pane-modules" role="tabpanel" aria-labelledby="tab-modules" hidden>
-        <div class="pipeline" id="pipeline"></div>
-        <div class="note">
-          The same seven names appear in the architecture diagram and in the trace. Four make
-          no model call at all — the grounding guarantees are code, not prompts.
+        <div class="pane">
+          <h3>Facts derived <span class="n" id="n-facts"></span></h3>
+          <div class="scroller"><div class="ledger" id="ledger"></div></div>
+          <div class="note">
+            Provenance travels with each fact. A value derived from weaker inputs can
+            never come back stronger than the weakest one it was built from.
+          </div>
         </div>
-      </div>
-      <div id="pane-cost" role="tabpanel" aria-labelledby="tab-cost" hidden>
-        <div class="metrics" id="metrics"></div>
-        <div class="note" id="metrics-note"></div>
+        <div class="pane wide">
+          <h3>Cost of this run</h3>
+          <div class="metrics" id="metrics"></div>
+          <div class="note" id="metrics-note"></div>
+        </div>
+        <div class="pane wide">
+          <h3>Modules</h3>
+          <div class="pipeline" id="pipeline"></div>
+          <div class="note">
+            The same seven names appear in the architecture diagram and in the trace. Four
+            make no model call at all — the grounding guarantees are code, not prompts.
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -498,25 +501,6 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-/* ---------- tabs ---------- */
-const TABS = ["reasoning", "facts", "modules", "cost"];
-function selectTab(name) {
-  for (const t of TABS) {
-    const isOn = t === name;
-    $(`tab-${t}`).setAttribute("aria-selected", String(isOn));
-    $(`pane-${t}`).hidden = !isOn;
-  }
-}
-TABS.forEach((t, i) => {
-  $(`tab-${t}`).addEventListener("click", () => selectTab(t));
-  $(`tab-${t}`).addEventListener("keydown", (e) => {
-    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const next = TABS[(i + step + TABS.length) % TABS.length];
-    selectTab(next); $(`tab-${next}`).focus();
-  });
-});
 
 /* ---------- reading a turn ----------
    The loop's user prompt is assembled by the server in a fixed shape, so it can
