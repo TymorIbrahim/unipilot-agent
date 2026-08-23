@@ -242,3 +242,53 @@ class TestStoredEnumValuesReachTheReaderAsWords:
         """Course titles are data. Guessing at their language corrupts them."""
         title = "Introduction to Human Factors Engineering"
         assert title in self.render(title, self.HEBREW_Q)
+
+
+class TestAZeroCountIsAlreadyTheNegative:
+    """Live, asked in Hebrew whether a course had been passed:
+
+        "לא — אין לך 0 רשומות מעבר לקורס המבוקש."
+        ("No -- you do NOT have 0 passing records for that course.")
+
+    Every part is derived and the sentence means the reverse of what it is for:
+    not having zero records is having some. The model wrapped a negation around
+    a `{count}` slot without knowing it would render 0 -- it cannot know, it
+    never sees the value -- so the phrasing works for every count except the one
+    that came back.
+
+    Nothing else catches it. The digit came from a real fact, so grounding is
+    satisfied; the verdict "לא" is correct, so the stance checks pass; and it
+    reads as fluent prose. Only the arithmetic of the sentence is wrong.
+    """
+
+    def kinds(self, text: str) -> list[str]:
+        from app.agent_core.facts.postconditions import (
+            check_a_zero_count_is_not_also_negated as check,
+        )
+
+        return [v.kind for v in check(text)]
+
+    def test_the_live_answer_is_refused(self) -> None:
+        assert self.kinds("לא — אין לך 0 רשומות מעבר לקורס המבוקש.") == ["negated_zero"]
+
+    def test_the_english_shape_is_refused_too(self) -> None:
+        assert self.kinds("No — you do not have 0 passing records.") == ["negated_zero"]
+
+    def test_a_contraction_counts_as_a_negation(self) -> None:
+        """In "aren't" the n is mid-word, so a leading \\b never matches it."""
+        assert self.kinds("There aren't 0 matching rows.") == ["negated_zero"]
+
+    def test_the_coherent_form_survives(self) -> None:
+        """The negation AFTER the count is the correct sentence, and by far the
+        commonest -- refusing it would break every eligibility denial."""
+        assert self.kinds(
+            "You meet 0 of 1 prerequisite groups, so you are not eligible."
+        ) == []
+
+    def test_a_distant_zero_is_not_captured(self) -> None:
+        assert self.kinds(
+            "אין לך חסימה כרגע: עמדת ב-2 מתוך 2 קבוצות, ו-0 קורסים חסרים."
+        ) == []
+
+    def test_an_ordinary_negative_answer_survives(self) -> None:
+        assert self.kinds("No — you have not taken 00940412.") == []

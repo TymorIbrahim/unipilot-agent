@@ -44,6 +44,7 @@ from app.agent_core.facts.postconditions import (
     check_no_edge_identifiers,
     check_periods_are_whole,
     check_count_states_its_basis,
+    check_a_zero_count_is_not_also_negated,
     check_answer_does_not_narrate_the_catalog_lookup,
     check_prereq_verdict_matches_the_edges,
     check_term_within_requested_cap,
@@ -132,6 +133,7 @@ def verify_answer(
     violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)
     violations += check_answer_does_not_narrate_the_catalog_lookup(answer.text)
+    violations += check_a_zero_count_is_not_also_negated(answer.text)
     # Replays an eligibility verdict the answer ASSERTED. The grounding
     # invariant refuses a typed digit, so "you need 25.5 credits" cannot be
     # invented -- but "its prerequisites are not satisfied" carries no number

@@ -751,6 +751,52 @@ def check_prereq_verdict_matches_the_edges(
     ]
 
 
+_NEGATED_ZERO = re.compile(
+    # `\w*n['\u2019]t` rather than `n[o']t`: in "aren't" and "doesn't" the n is
+    # mid-word, so a leading \b never matches and the contraction slips past.
+    r"(?:\b(?:no|not|never|אין|לא)\b|\w*n['\u2019]t\b)"
+    r"[^.;!?\n]{0,14}?(?<![\d.])0(?![\d.])",
+    re.IGNORECASE,
+)
+
+
+def check_a_zero_count_is_not_also_negated(text: str) -> list[Violation]:
+    """A count of zero IS the negative. Negating it says the opposite.
+
+    Live, asked in Hebrew whether a course had been passed:
+
+        "לא — אין לך 0 רשומות מעבר לקורס המבוקש."
+        ("No -- you do NOT have 0 passing records for that course.")
+
+    Every part is derived and the sentence means the reverse of what it is for:
+    read literally, not having zero records is having some. The model wrote a
+    negation around a `{count}` slot without knowing the slot would render 0 --
+    it cannot know, it never sees the value -- so the phrasing works for every
+    count except the one that actually came back.
+
+    Nothing else catches it. The digit came from a real fact, so the grounding
+    invariant is satisfied; the verdict "לא" is correct, so the stance checks
+    pass; and it reads as fluent prose. Only the arithmetic of the sentence is
+    wrong.
+
+    Scoped tight: the negation must sit within a few characters BEFORE the zero.
+    "you meet 0 of 1 groups, so you are not eligible" puts the negation after,
+    and is the coherent form this must never touch.
+    """
+    found = _NEGATED_ZERO.search(text or "")
+    if not found:
+        return []
+    return [
+        Violation(
+            "negated_zero",
+            f"'{found.group(0).strip()}' negates a count that is already zero, so the sentence "
+            "claims the opposite of what you mean -- not having 0 records is having some. A "
+            "zero count needs no negation: say it plainly ('you have not taken it', 'no "
+            "matching records'), or state the count without the negative around it.",
+        )
+    ]
+
+
 def check_term_within_requested_cap(
     term_credits: float, requested: float, term_label: str = "a term"
 ) -> list[Violation]:
