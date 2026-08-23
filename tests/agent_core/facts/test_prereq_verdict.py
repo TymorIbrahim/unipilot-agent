@@ -232,3 +232,94 @@ class TestTheCatalogLookupIsNotTheAnswer:
         )
         kinds = [v.kind for v in verify_answer(answer, {}, "")]
         assert "narrates_the_catalog_lookup" in kinds
+
+
+class TestAPassClaimedWithAPronoun:
+    """"you already passed it" is the same dangerous claim, wearing a pronoun.
+
+    Live, asked "Am I eligible to take 00960211?":
+
+        "No -- the course exists in the catalog, and you already passed it in 41
+         recorded attempts, so you are not eligible to take it again."
+
+    Checked against SQL: the student has NOT passed 00960211, and 41 is their
+    TOTAL passed-course count -- a `find` on `passed_courses` filtered only by
+    userId. Every number is real and the sentence is false, which is exactly
+    what `check_claimed_pass_is_on_the_transcript` exists for. It missed because
+    it was looking for digits next to the verb.
+
+    Worse than a wrong answer: the same question asked in Hebrew answered
+    "yes, you meet 1 of 1 groups". Two opposite verdicts, one of them telling a
+    student not to register for a course they need.
+    """
+
+    LIVE = (
+        "No — the course exists in the catalog, and you already passed it in 41 "
+        "recorded attempts, so you are not eligible to take it again."
+    )
+    ASKED = "Am I eligible to take 00960211?"
+
+    def kinds(self, text: str, passed, question: str) -> list[str]:
+        from app.agent_core.facts.postconditions import (
+            check_claimed_pass_is_on_the_transcript as check,
+        )
+
+        return [v.kind for v in check(text, passed, question)]
+
+    def test_the_live_answer_is_refused(self) -> None:
+        assert self.kinds(self.LIVE, ["00940314"] * 41, self.ASKED) == ["unearned_pass"]
+
+    def test_a_true_claim_survives(self) -> None:
+        assert self.kinds("You already passed it.", ["00960211"], self.ASKED) == []
+
+    def test_two_courses_asked_is_never_guessed_at(self) -> None:
+        """The pronoun's referent is only unambiguous when ONE course was asked."""
+        assert self.kinds(
+            "You already passed it.",
+            ["00940314"],
+            "Is 00960211 or 01040174 easier for me?",
+        ) == []
+
+    def test_the_hebrew_phrasing_is_caught(self) -> None:
+        assert self.kinds("כבר עברת אותו.", ["00940314"] * 41, self.ASKED) == [
+            "unearned_pass"
+        ]
+
+    def test_no_transcript_held_means_no_opinion(self) -> None:
+        assert self.kinds(self.LIVE, [], self.ASKED) == []
+
+
+class TestTheCatalogDenialIsAboutTheCatalog:
+    """The exemption was twice too loose, and exempted the worst answer twice.
+
+    A leading verdict -- "No -- the course exists in the catalog..." -- satisfied
+    both "a negator within 30 characters of 'catalog'" and "a negator within 12
+    characters before the phrase". The negation has to belong to the existence
+    predicate, not merely appear near it.
+    """
+
+    def kinds(self, text: str) -> list[str]:
+        from app.agent_core.facts.postconditions import (
+            check_answer_does_not_narrate_the_catalog_lookup as check,
+        )
+
+        return [v.kind for v in check(text)]
+
+    def test_a_leading_verdict_no_does_not_exempt_the_narration(self) -> None:
+        assert self.kinds(
+            "No — the course exists in the catalog, and you meet 0 of 1 groups."
+        ) == ["narrates_the_catalog_lookup"]
+
+    def test_hebrew_narration_is_caught(self) -> None:
+        assert self.kinds("כן — הקורס קיים בקטלוג, ואתה עומד ב-1 מתוך 1.") == [
+            "narrates_the_catalog_lookup"
+        ]
+
+    def test_a_real_denial_of_existence_still_survives(self) -> None:
+        for text in (
+            "00999999 is not in the catalog, so I cannot say anything about it.",
+            "That course number does not exist in the catalog.",
+            "I could not find 00999999 in the catalog.",
+            "הקורס לא קיים בקטלוג.",
+        ):
+            assert self.kinds(text) == [], text

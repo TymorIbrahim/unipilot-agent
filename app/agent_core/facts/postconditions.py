@@ -156,8 +156,26 @@ _CLAIMED_PASS = re.compile(
 )
 
 
+_CLAIMED_PASS_PRONOUN = re.compile(
+    r"\byou\s+(?:already\s+|have\s+|had\s+|previously\s+)*passed\s+it\b"
+    r"|\b(?:כבר\s+)?עברת\s+(?:אותו|את\s+הקורס)\b",
+    re.IGNORECASE,
+)
+"""The same claim with a pronoun where the code should be.
+
+`_CLAIMED_PASS` binds to a code the answer states, and the model does not always
+state one. Live, asked "am I eligible to take 00960211?":
+
+    "No -- the course exists in the catalog, and you already passed it in 41
+     recorded attempts, so you are not eligible to take it again."
+
+The student has NOT passed 00960211; 41 is their total passed-course count. The
+identical defect the named form was written for, wearing a pronoun, and it sailed
+through because the guard was looking for digits next to the verb."""
+
+
 def check_claimed_pass_is_on_the_transcript(
-    text: str, passed_codes: "Sequence[str]"
+    text: str, passed_codes: "Sequence[str]", question: str = ""
 ) -> list[Violation]:
     """Telling a student they passed a course they have not is the worst answer
     this system can give, and every other gate passes it.
@@ -185,6 +203,26 @@ def check_claimed_pass_is_on_the_transcript(
     if not passed_codes:
         return []
     known = {str(code) for code in passed_codes}
+
+    # "you already passed it" -- the pronoun's referent is the course the
+    # QUESTION named, and only when it named exactly one, so an answer
+    # comparing two courses is never guessed at.
+    asked = set(_CODE.findall(question or ""))
+    if len(asked) == 1 and _CLAIMED_PASS_PRONOUN.search(text or ""):
+        code = asked.pop()
+        if code not in known:
+            return [
+                Violation(
+                    "unearned_pass",
+                    f"the answer says the student already passed {code}, and {code} is not among "
+                    f"the {len(known)} courses on their transcript. A `find` on `passed_courses` "
+                    "filtered only by userId returns EVERY course they passed, so its COUNT is "
+                    "their transcript length, not evidence about this course. Filter by the "
+                    "course number too, and if no row comes back say plainly they have not "
+                    "taken it.",
+                )
+            ]
+
     for match in _CLAIMED_PASS.finditer(text or ""):
         code = match.group(1)
         if code not in known:
@@ -579,11 +617,32 @@ _NARRATES_CATALOG = re.compile(
     r"|\bfound\s+(?:it\s+)?in\s+the\s+catalog\b",
     re.IGNORECASE,
 )
+_NARRATES_CATALOG_HE = re.compile(
+    r"\bהקורס\s+(?:קיים|נמצא|מופיע)\s+בקטלוג"
+    r"|\b(?:קיים|נמצא|מופיע)\s+בקטלוג\b",
+)
 _DENIES_CATALOG = re.compile(
-    r"\b(?:not|n[o']t|no)\b[^.;]{0,30}?\bcatalog\b"
-    r"|\bcatalog\b[^.;]{0,30}?\b(?:not|n[o']t)\b",
+    r"\b(?:not|n[o']t)\s+(?:be\s+)?(?:in|on|exists?|listed|found|appears?)\b"
+    r"[^.;!?]{0,25}\bcatalog\b"
+    r"|\b(?:could|can)\s+n[o']t\s+find\b[^.;!?]{0,40}\bcatalog\b"
+    r"|\bלא\s+(?:קיים|נמצא|מופיע)\b[^.;!?]{0,20}בקטלוג",
     re.IGNORECASE,
 )
+"""A denial of EXISTENCE, which is the one case where the catalog is the answer.
+
+Twice too loose before this. First it asked whether "not" appeared anywhere
+within 30 characters of the word "catalog"; then whether a negator sat within 12
+characters before the phrase. A leading VERDICT satisfies both --
+
+    "No -- the course exists in the catalog, and you already passed it in 41
+     recorded attempts, so you are not eligible to take it again."
+
+-- so the check exempted itself on precisely the answer it was written for, and
+that answer also told the student they had passed a course they had not.
+
+The negation has to belong to the existence PREDICATE ("is not in", "does not
+exist", "could not find"), not merely appear near it. A verdict elsewhere in the
+sentence is not a claim about the catalog."""
 
 
 def check_answer_does_not_narrate_the_catalog_lookup(text: str) -> list[Violation]:
@@ -611,8 +670,11 @@ def check_answer_does_not_narrate_the_catalog_lookup(text: str) -> list[Violatio
     reason this file exists.
     """
     body = text or ""
-    if not _NARRATES_CATALOG.search(body) or _DENIES_CATALOG.search(body):
+    match = _NARRATES_CATALOG.search(body) or _NARRATES_CATALOG_HE.search(body)
+    if match is None:
         return []
+    if _DENIES_CATALOG.search(body):
+        return []  # "00999999 is NOT in the catalog" -- there, existence IS the answer
     return [
         Violation(
             "narrates_the_catalog_lookup",
