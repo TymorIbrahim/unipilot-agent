@@ -322,6 +322,22 @@ def _scalar_expression(payload: Any, pipeline: str, index: int) -> ScalarExpr:
         # A held scalar reference inside a per-record expression -- the same
         # {"fact": name} idiom used for predicate values, so a computed total can
         # feed a per-row formula (the per-course GPA threshold).
+        #
+        # An EXTRA key here is not a harmless decoration. `{"fact": "course",
+        # "field": "courseNumber"}` parsed to `Held("course")` and dropped the
+        # field in silence, so a model asking for one course number was handed
+        # the whole collection and told nothing. Silent is the worst outcome
+        # available: a parse error costs one turn, and a value that is quietly
+        # the wrong thing costs the answer.
+        extra = sorted(set(payload) - {"fact"})
+        if extra:
+            raise ParseError(
+                f"{pipeline} stage {index}: {{'fact': ...}} takes no other keys, and "
+                f"{extra} would be ignored. A fact reference names the WHOLE fact -- it "
+                "cannot reach a field inside a collection. `project` the field and "
+                "`select` the row you want, or use `traverse` if you are following "
+                "prerequisites of prerequisites."
+            )
         return Held(str(payload["fact"]))
 
     for key, operator in _ARITH.items():
@@ -352,9 +368,34 @@ def _scalar_expression(payload: Any, pipeline: str, index: int) -> ScalarExpr:
                 right=_scalar_expression(operands[1], pipeline, index),
             )
 
+    # Naming the ARITHMETIC operators is the right answer when the model wrote
+    # arithmetic wrongly, and points away from the answer when it did not. A
+    # live run spent 196s and timed out attempting, four ways, to take one
+    # field's value out of a one-row collection so it could feed the next
+    # `find`:
+    #
+    #     {"only": [{"fact": "target_prereq_edges", "field": "requires"}]}
+    #     {"value": {"fact": "target_course", "field": "courseNumber"}}
+    #
+    # That is not an expression and never will be -- it is a CHAIN WALK, which
+    # `traverse` exists for. Ten of those failures cascaded into 14 "refers to
+    # a fact which is not held" and 12 "not run: it depends on X, which failed",
+    # so nearly the whole run traces back to an error message that listed
+    # `ceil_div` at a model trying to follow prerequisites.
+    reaching_into_a_collection = isinstance(payload, Mapping) and (
+        "fact" in payload or "only" in payload
+    )
+    hint = (
+        " To take a value OUT of a collection, do not write an expression: `project` the field "
+        "and `select` the row you want, or -- if you are following prerequisites of "
+        "prerequisites -- use `traverse`, which walks a chain whose depth the data decides. "
+        "A pipeline of N joins reaches exactly N levels."
+        if reaching_into_a_collection
+        else ""
+    )
     raise ParseError(
         f"{pipeline} stage {index}: expression must be {{'path': ...}}, {{'value': ...}}, or one of "
-        f"{sorted(set(_ARITH) - set('+-*/×÷'))}."
+        f"{sorted(set(_ARITH) - set('+-*/×÷'))}.{hint}"
     )
 
 
