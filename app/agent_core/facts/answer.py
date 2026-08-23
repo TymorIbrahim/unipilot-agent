@@ -140,6 +140,11 @@ def resolve_answer(
     unknown: list[str] = []
     detail_renders: list[str] = []
     detailed: list[tuple[str, Any]] = []
+    detail_slots: list[str] = []
+    """The `{name:detail}` slot text itself, so where it LANDED can be checked.
+
+    A `:detail` render is a table -- `label value · label value · ...` -- and a
+    table inside a clause is not a sentence."""
 
     def substitute(match: re.Match[str]) -> str:
         name, modifier = match.group(1), match.group(2)
@@ -152,6 +157,7 @@ def resolve_answer(
             counted.append(name)
         rendered = _render(held.value, modifier, hebrew)
         if modifier == "detail":
+            detail_slots.append(match.group(0))
             # Kept per SLOT, not merged, so the duplicate rule can tell a course
             # listed in two semesters from a course named twice inside one list.
             detail_renders.append(rendered)
@@ -214,6 +220,17 @@ def resolve_answer(
             f"the answer writes the fact NAME {', '.join(repr(n) for n in leaked)} as prose. "
             "A reader sees the variable, not its value -- put it in braces to slot it, "
             "or say the value in your own words."
+        )
+
+    embedded = _detail_inside_a_clause(template, detail_slots)
+    if embedded:
+        return Ungrounded(
+            f"'{embedded}' is a TABLE and it is written inside a sentence, which reads as "
+            "\"your plan is term winter · courses 6 · credits 16\". A `:detail` slot renders "
+            "one labelled row per record, so it belongs on its own line, or after a label "
+            "ending in a colon. If what you wanted was ONE number out of that row, `project` "
+            "the field you mean and slot THAT, or `compute` it -- a slot cannot take a field "
+            "off a collection."
         )
 
     if not used:
@@ -345,6 +362,39 @@ def resolve_answer(
             if facts[name].derivation
         ),
     )
+
+
+_LABEL_LEAD = re.compile(r"(?:^|\n)\s*(?:[-*\u2022]\s*)?[^\n]{0,60}?[:\u2014\u2013-]\s*$")
+
+
+def _detail_inside_a_clause(template: str, slots: "list[str]") -> str:
+    """The first `:detail` slot written into the middle of a sentence, if any.
+
+    A one-record `:detail` used to carry a list bullet, which forced it onto its
+    own line. Dropping the bullet was right -- a stranded "- " mid-sentence
+    looked broken -- but it also made the row INLINE-ABLE, and the model started
+    writing it into prose:
+
+        "Your winter semester plan is term winter · courses 6 · credits 16."
+
+    Correct, and not a sentence. The renderer cannot fix this, because the error
+    is where the slot was PLACED, and that is visible only here.
+
+    Deliberately permissive about what may precede it: a label ending in a
+    colon or a dash ("Summary: {plan:detail}") is a legitimate introduction and
+    reads fine. Only a slot with an ordinary clause running into it is refused.
+    """
+    for slot in slots:
+        index = template.find(slot)
+        if index <= 0:
+            continue
+        before = template[:index]
+        if before.endswith("\n") or not before.strip():
+            continue
+        if _LABEL_LEAD.search(before):
+            continue
+        return slot
+    return ""
 
 
 def _did_you_mean(unknown: tuple, facts: Mapping[str, object]) -> str:

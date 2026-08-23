@@ -694,3 +694,62 @@ class TestABulletOnlyAppearsInAList:
         result = resolve_answer("{plan:detail}", {"plan": _held(plan, Basis.SIMULATED)})
         assert isinstance(result, Answer)
         assert result.text == "- term winter\n- term spring"
+
+
+class TestATableMustNotSitInsideASentence:
+    """`:detail` renders a labelled row per record, and a row inside a clause is
+    not a sentence.
+
+    A one-record `:detail` used to carry a list bullet, which forced it onto its
+    own line. Dropping the bullet was right -- a stranded "- " mid-sentence read
+    as broken -- but it also made the row INLINE-ABLE, and the model started
+    writing it into prose. Live, twice:
+
+        "Your winter semester plan is term winter · courses 6 · credits 16."
+        "It totals term winter · courses 6 · credits 16."
+
+    Both correct, neither a sentence. The renderer cannot fix it: the error is
+    where the slot was PLACED, which is visible only at the boundary.
+
+    What makes this worth a check rather than a prompt line is that the model
+    has no cheap alternative -- a slot cannot take one field off a collection
+    (`{fact.field}` is refused by design), so reaching for the whole row is the
+    path of least resistance. The refusal names the two legal moves.
+    """
+
+    def refuse(self, template: str) -> str:
+        from app.agent_core.facts.answer import _detail_inside_a_clause
+
+        return _detail_inside_a_clause(template, ["{plan:detail}"])
+
+    def test_a_table_run_into_a_clause_is_refused(self) -> None:
+        assert self.refuse("Your winter semester plan is {plan:detail}.")
+
+    def test_its_own_line_is_fine(self) -> None:
+        assert not self.refuse("Summary:\n{plan:detail}")
+
+    def test_a_label_ending_in_a_colon_is_fine(self) -> None:
+        """"Summary: <row>" reads correctly and is the shape the prompt asks for."""
+        assert not self.refuse("Summary: {plan:detail}")
+
+    def test_a_dash_lead_is_fine(self) -> None:
+        assert not self.refuse("Winter — {plan:detail}")
+
+    def test_a_slot_alone_is_fine(self) -> None:
+        assert not self.refuse("{plan:detail}")
+
+    def test_the_refusal_names_both_legal_moves(self) -> None:
+        """A reason the model cannot act on wastes the retry it costs, and here
+        the fix is not obvious: a slot cannot take a field off a collection."""
+        result = resolve_answer(
+            "Your plan is {plan:detail}.",
+            {"plan": _held(
+                Collection(
+                    records=(Record(fields={"term": Scalar(ScalarKind.TEXT, "winter")},
+                                    basis=Basis.SIMULATED),),
+                    completeness=Completeness(complete=True, total=1),
+                ),
+                Basis.SIMULATED)},
+        )
+        assert isinstance(result, Ungrounded)
+        assert "project" in result.reason and "compute" in result.reason
