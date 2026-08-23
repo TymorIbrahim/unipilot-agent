@@ -697,3 +697,44 @@ class TestAFollowUpIsToldToReDerive:
             "the answer refers to 'x', which is not a held fact.",
         ):
             assert _grounded_in_anything(reason), reason
+
+
+class TestAbsenceIsAFinding:
+    """Several passages read and none containing the value says "not in the
+    corpus", and nothing was drawing that conclusion.
+
+    Each individual defect -- "'X' does not answer Q with a quantity: it
+    contains no such value" -- is correct and says only "not HERE". Asked for a
+    minimum attendance percentage, which the Technion regulations do not set, a
+    live run spent 136.9s and 24 steps re-reading passages and then shipped a
+    partial: 18 attempts to aggregate a truncated search result and 13
+    references to facts it never held, all downstream of refusing to conclude
+    the obvious.
+
+    The honest answer was reachable on turn three, and the SAME question in
+    Hebrew reached it -- so this is a convergence problem, not a capability one.
+    """
+
+    def test_three_is_the_threshold(self) -> None:
+        """Two can be one badly-chosen source and its neighbour; concluding from
+        those would turn a retrieval miss into a false claim that the
+        regulations are silent."""
+        from app.agent_core.facts.loop import _ABSENT_READINGS_BEFORE_CONCLUDING
+
+        assert _ABSENT_READINGS_BEFORE_CONCLUDING == 3
+
+    def test_the_sentinel_matches_what_prose_actually_emits(self) -> None:
+        """A lookup that misses is indistinguishable from a check that does not
+        exist -- so this asserts the two strings are the same string."""
+        from app.agent_core.facts.loop import _VALUE_ABSENT_FROM_PASSAGE
+        from app.agent_core.facts.prose import _cannot_determine
+        from app.agent_core.facts.types import ScalarKind
+
+        class _P:
+            slug = "regulations-undergraduate"
+
+        defect = _cannot_determine(
+            _P(), "minimum attendance percentage", ScalarKind.QUANTITY,
+            why="it contains no such value",
+        )
+        assert _VALUE_ABSENT_FROM_PASSAGE in defect.message

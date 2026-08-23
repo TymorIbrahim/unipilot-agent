@@ -76,6 +76,16 @@ asked about physical education, spent 22 turns the same way. Five is well above
 the two or three a genuine multi-page question uses -- the knowledge-base
 question that motivated `NO_PROGRESS_LIMIT` searches four phrasings at most."""
 
+_ABSENT_READINGS_BEFORE_CONCLUDING = 3
+"""Readings that must come back empty before absence is stated as the finding.
+
+Three, not two: two can be one badly-chosen source and its neighbour, and
+concluding from those would turn a retrieval miss into a false claim that the
+regulations are silent. Three distinct passages failing is evidence about the
+CORPUS rather than about the query."""
+
+_VALUE_ABSENT_FROM_PASSAGE = "it contains no such value"
+
 _PREMATURE_ANSWER_LIMIT = 2
 """Answer attempts made before anything is fetched that are FORGIVEN.
 
@@ -166,6 +176,9 @@ async def run_loop(
     """
     result = LoopResult(outcome="exhausted", facts=context.facts, question=question)
     observations: list[str] = []
+    absent_readings = 0
+    """How many passages have been read for a value and found not to contain it."""
+    concluded_absent = False
     idle_turns = 0
     rejections = 0
     premature = 0
@@ -444,6 +457,30 @@ async def run_loop(
                 return result
             for name, defect in outcome.defects.items():
                 observations.append(f"{DEFECT_NOTE} -- '{name}': {defect.message}")
+                if _VALUE_ABSENT_FROM_PASSAGE in defect.message:
+                    absent_readings += 1
+
+            # ABSENCE IS A FINDING. Each "does not answer ... it contains no
+            # such value" is correct and individually says only "not here";
+            # several of them together say "not in the corpus", and nothing was
+            # drawing that conclusion. Asked for a minimum attendance percentage
+            # -- which the regulations do not set -- a live run spent 136.9s and
+            # 24 steps re-reading passages, then shipped a partial: 18 attempts
+            # to aggregate a truncated search result and 13 references to facts
+            # it never held, all downstream of refusing to conclude the obvious.
+            #
+            # The honest answer was reachable on turn three, and the SAME
+            # question in Hebrew reached it, so this is a convergence problem
+            # rather than a capability one.
+            if absent_readings >= _ABSENT_READINGS_BEFORE_CONCLUDING and not concluded_absent:
+                concluded_absent = True
+                observations.append(
+                    f"{absent_readings} separate passages have now been read for this value and "
+                    "none contains it. That is your ANSWER, not a reason to search again: the "
+                    "corpus does not cover it. Say so plainly, name how many sources you "
+                    "checked, and do NOT offer a number from anywhere else -- a plausible "
+                    "figure with no passage behind it is the worst thing you can return here."
+                )
             # The transcript records WHY, not just how many. A first live run
             # showed six failed calls as "1 defect(s)" each, which said nothing
             # about what went wrong -- and a transcript that cannot explain a
