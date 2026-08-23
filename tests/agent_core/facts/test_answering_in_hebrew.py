@@ -182,3 +182,63 @@ class TestThePartialIsWrittenInTheAskedLanguage:
         for question in ("כמה סמסטרים נשארו לי?", "How many semesters are left?"):
             assert "25.5" in self.partial(question)
             assert "credits needed" in self.partial(question)
+
+
+class TestStoredEnumValuesReachTheReaderAsWords:
+    """`סוג mandatory · דרישות met` -- a live Hebrew plan, verbatim.
+
+    The planner writes `prereqStatus: "check_prerequisites"` and the catalog
+    writes `category: "elective"`, and `:detail` printed them as stored. In a
+    Hebrew answer that is English inside Hebrew prose; `check_prerequisites` is
+    worse than untranslated, because it is an instruction to the system and the
+    student has been handed a variable name.
+
+    `_render_scalar` has printed bools as "yes"/"no" since the beginning, so a
+    presentation decision in code is established here, not a new boundary.
+    """
+
+    def render(self, value: str, question: str) -> str:
+        from app.agent_core.facts.answer import HeldFact, resolve_answer
+        from app.agent_core.facts.types import (
+            Basis, Collection, Completeness, Record, Scalar, ScalarKind,
+        )
+
+        plan = Collection(
+            records=(
+                Record(
+                    fields={"סוג": Scalar(ScalarKind.TEXT, value)},
+                    basis=Basis.SIMULATED,
+                ),
+            ),
+            completeness=Completeness(complete=True, total=1),
+        )
+        result = resolve_answer(
+            "{plan:detail}", {"plan": HeldFact(plan, Basis.SIMULATED)}, question
+        )
+        return result.text
+
+    HEBREW_Q = "תכנן לי סמסטר"
+    ENGLISH_Q = "plan my term"
+
+    def test_a_hebrew_question_gets_hebrew_enum_values(self) -> None:
+        assert self.render("mandatory", self.HEBREW_Q) == "סוג חובה"
+        assert self.render("elective", self.HEBREW_Q) == "סוג בחירה"
+
+    def test_an_english_question_keeps_english(self) -> None:
+        assert self.render("mandatory", self.ENGLISH_Q) == "סוג mandatory"
+
+    def test_an_internal_status_never_reaches_the_reader_raw(self) -> None:
+        """`check_prerequisites` is a variable name, in either language."""
+        for question in (self.HEBREW_Q, self.ENGLISH_Q):
+            assert "check_prerequisites" not in self.render(
+                "check_prerequisites", question
+            )
+
+    def test_an_unknown_value_passes_through_untouched(self) -> None:
+        """A closed table must not mangle an enum nobody anticipated."""
+        assert self.render("seminar", self.HEBREW_Q) == "סוג seminar"
+
+    def test_free_text_is_never_translated(self) -> None:
+        """Course titles are data. Guessing at their language corrupts them."""
+        title = "Introduction to Human Factors Engineering"
+        assert title in self.render(title, self.HEBREW_Q)

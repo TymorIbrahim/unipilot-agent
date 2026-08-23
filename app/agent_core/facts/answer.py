@@ -30,6 +30,7 @@ from app.agent_core.facts.types import Basis, Collection, Scalar, weakest
 
 _SLOT = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([a-z]+))?\}")
 _NUMERAL = re.compile(r"\d")
+_HEBREW_CHAR = re.compile(r"[֐-׿]")
 _BROKEN_SLOT = re.compile(r"\{[a-zA-Z_][^}]*[.:][^}]*\}")
 """A `{...}` that looks like an intended slot but is not one -- it carries a `.`
 or a second `:`, as in `{fact.field}`. Checked AFTER valid slots are
@@ -121,6 +122,14 @@ def resolve_answer(
     computation; it is the user's own reference, and refusing it makes the agent
     unable to say what it is talking about.
     """
+    # The reader's language, decided once. Enum VALUES the planner stores
+    # ("elective", "check_prerequisites") are printed to the student, and in a
+    # Hebrew answer they arrived as English inside Hebrew prose -- see
+    # `_ENUM_WORDS`. Read off the QUESTION rather than the model's prose: the
+    # question is what the student wrote, and a template can be almost all
+    # slots with too little prose to judge.
+    hebrew = bool(_HEBREW_CHAR.search(question or ""))
+
     used: list[str] = []
     counted: list[str] = []
     """Facts cited as `{name:count}` rather than listed.
@@ -141,7 +150,7 @@ def resolve_answer(
         used.append(name)
         if modifier == "count":
             counted.append(name)
-        rendered = _render(held.value, modifier)
+        rendered = _render(held.value, modifier, hebrew)
         if modifier == "detail":
             # Kept per SLOT, not merged, so the duplicate rule can tell a course
             # listed in two semesters from a course named twice inside one list.
@@ -511,16 +520,18 @@ def _is_empty(value: Union[Collection, Scalar]) -> bool:
     return isinstance(value, Collection) and not value.records
 
 
-def _render(value: Union[Collection, Scalar], modifier: str | None) -> str:
+def _render(
+    value: Union[Collection, Scalar], modifier: str | None, hebrew: bool = False
+) -> str:
     if isinstance(value, Scalar):
-        return _render_scalar(value)
+        return _render_scalar(value, hebrew)
 
     if modifier == "count":
         return str(len(value.records))
     if modifier == "detail":
-        return _render_detail(value)
+        return _render_detail(value, hebrew)
     if modifier == "list" or modifier is None:
-        rendered = [_readable_field(record) for record in value.records]
+        rendered = [_readable_field(record, hebrew) for record in value.records]
         rendered = [text for text in rendered if text]
         if not rendered:
             return "(none)"
@@ -535,7 +546,7 @@ def _render(value: Union[Collection, Scalar], modifier: str | None) -> str:
     return str(len(value.records))
 
 
-def _render_detail(value: Collection) -> str:
+def _render_detail(value: Collection, hebrew: bool = False) -> str:
     """One record per line, each showing ALL its readable fields as `name value`.
 
     The bare `{fact}` list shows one field per record -- enough to say "these
@@ -560,7 +571,7 @@ def _render_detail(value: Collection) -> str:
     bullet = len(value.records) > 1
     lines = [
         line
-        for line in (_detail_line(record, bullet) for record in value.records)
+        for line in (_detail_line(record, bullet, hebrew) for record in value.records)
         if line
     ]
     if not lines:
@@ -571,9 +582,9 @@ def _render_detail(value: Collection) -> str:
     return "\n".join(lines)
 
 
-def _detail_line(record: Collection, bullet: bool = True) -> str:
+def _detail_line(record: Collection, bullet: bool = True, hebrew: bool = False) -> str:
     parts = [
-        f"{_readable_label(name)} {_render_scalar(v)}"
+        f"{_readable_label(name)} {_render_scalar(v, hebrew)}"
         for name, v in record.fields.items()
         if isinstance(v, Scalar) and name != "_id" and not _OBJECT_ID.fullmatch(str(v.value))
     ]
@@ -627,7 +638,7 @@ _LIST_CAP = 15
 rest. Enough to show a real plan's courses; short of dumping a whole catalog."""
 
 
-def _readable_field(record: Collection) -> str:
+def _readable_field(record: Collection, hebrew: bool = False) -> str:
     """The field of a record worth showing a person.
 
     PREFERRED BY NAME first, then by elimination. The old rule took the first
@@ -652,7 +663,7 @@ def _readable_field(record: Collection) -> str:
     for preferred in _PREFERRED_READABLE:
         value = by_name.get(preferred)
         if value is not None and str(value.value).strip():
-            return _render_scalar(value)
+            return _render_scalar(value, hebrew)
 
     readable = [
         v for name, v in scalars
@@ -662,7 +673,7 @@ def _readable_field(record: Collection) -> str:
         and not _GROUP_ID_VALUE.fullmatch(str(v.value))
     ]
     chosen = readable[0] if readable else (scalars[0][1] if scalars else None)
-    return _render_scalar(chosen) if chosen is not None else ""
+    return _render_scalar(chosen, hebrew) if chosen is not None else ""
 
 
 _PREFERRED_READABLE = (
@@ -691,9 +702,51 @@ precision it was computed with.
 """
 
 
-def _render_scalar(value: Scalar) -> str:
+_ENUM_WORDS: dict[str, tuple[str, str]] = {
+    # stored value      ->  (English, Hebrew)
+    "mandatory":            ("mandatory", "חובה"),
+    "elective":             ("elective", "בחירה"),
+    "satisfied":            ("met", "מולאו"),
+    "met":                  ("met", "מולאו"),
+    "check_prerequisites":  ("check first", "יש לבדוק"),
+    "check_corequisites":   ("check first", "יש לבדוק"),
+    "unmet":                ("NOT met", "לא מולאו"),
+    "none":                 ("none", "אין"),
+}
+"""Stored values that reach the reader, in the words a reader uses.
+
+The planner writes `prereqStatus: "check_prerequisites"` and the catalog writes
+`category: "elective"`, and `:detail` printed them verbatim, so a live Hebrew
+plan shipped rows reading `סוג mandatory · דרישות met` -- English enum values
+inside Hebrew prose. `check_prerequisites` is worse than untranslated: it is an
+instruction to the system, and a student reading it has been handed a variable
+name.
+
+This is a presentation decision in code, which `_render_scalar` already makes:
+a bool has been printed as "yes"/"no" since the beginning, for exactly this
+reason. So the boundary is not new here, only wider. It stays narrow in the
+ways that matter -- an explicit table, a closed vocabulary read off the two
+modules that emit it (`planning/term_plan.py`, the track catalog), and ANY
+value not listed passes through untouched, so an enum nobody anticipated is
+rendered as-is rather than mangled.
+
+Kept SHORT on purpose. The label beside them is the model's to name, so the
+value has to compose with whatever it picks: "prerequisites met" reads well
+until the label is already `prerequisites`, and then the row says "prerequisites
+meets-the-prerequisites". A short value degrades gracefully in both directions.
+
+What it deliberately does NOT do is translate free text. Course titles, faculty
+names and interpreted regulation phrases are data, and guessing at their
+language is how a correct answer becomes a wrong one."""
+
+
+def _render_scalar(value: Scalar, hebrew: bool = False) -> str:
     if isinstance(value.value, bool):
-        return "yes" if value.value else "no"
+        return ("כן" if value.value else "לא") if hebrew else ("yes" if value.value else "no")
+    if isinstance(value.value, str):
+        words = _ENUM_WORDS.get(value.value.strip().lower())
+        if words is not None:
+            return words[1] if hebrew else words[0]
     if isinstance(value.value, float):
         if value.value.is_integer():
             # 16.0 credits reads as a rounding artefact; 16 reads as an answer.

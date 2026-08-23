@@ -180,6 +180,13 @@ of names.
   question with English labels over Hebrew course titles is a half-translated
   answer; the label is yours to name, so name it in the reader's language.
 
+  A COLUMN THAT SAYS THE SAME THING ON EVERY ROW BELONGS IN THE SENTENCE, NOT
+  IN THE TABLE. Four courses each ending "· prerequisites met" spends four
+  lines telling the reader one thing. Do not project that column; write "all
+  four are clear to register for" once, above the list, and let the rows carry
+  what actually differs. Project the column only when the rows DISAGREE -- that
+  is when it is information.
+
 A COUNT OF SEMESTERS MUST CARRY THE CREDITS IT CAME FROM. "It will take you
 {semesters} semesters" is a number a student cannot check; "you need
 {credits_needed} more credits and your cap is {cap} per semester, so
