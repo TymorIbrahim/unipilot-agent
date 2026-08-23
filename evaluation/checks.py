@@ -30,8 +30,12 @@ import re
 _EDGE_ID = re.compile(r"\b\d{6,8}\s*->\s*\d{6,8}\b")
 
 _DENIALS = (
-    r"could ?n[o']?t (find|confirm|determine|locate|verify)",
-    r"can ?n[o']?t (find|confirm|determine|assess|tell|say)",
+    # Spelled out rather than `can ?n[o']?t`, which matches "cannot" and "can
+    # not" and never "can't" -- the commonest contraction of the three. "I can't
+    # confirm whether you met the deadline" is a textbook denial and read as
+    # none, which is the pessimistic direction this file exists to prevent.
+    r"(?:could\s?not|couldn['\u2019]t)\s+(find|confirm|determine|locate|verify)",
+    r"(?:cannot|can\s?not|can['\u2019]t)\s+(find|confirm|determine|assess|tell|say)",
     r"\bunable to\b",
     r"\bno (such|record|grade|result|entry|match|data)\b",
     r"\bnot (in|on|found|listed|recorded|present)\b",
@@ -188,13 +192,27 @@ def mentions_code(text: str, code: str) -> bool:
     return states_number(text, code)
 
 
+_ASIDE = re.compile(r"\([^()]{0,60}\)")
+
+
 def denies_knowledge(text: str) -> bool:
     """Whether the answer says it could not establish something.
 
     Generous by design: this is the shape of a CORRECT answer to an unanswerable
     question, so a narrow pattern here turns good behaviour into a red mark.
+
+    PARENTHESISED ASIDES ARE STRIPPED FIRST, because a note attached to one item
+    is not the answer refusing the question. The agent began annotating a
+    prerequisite the catalog does not carry:
+
+        "Yes -- you are eligible. 00960211 requires any one of 00940224 (Data
+         Structures and Algorithms), 00940226 (not in the course catalog)."
+
+    A confident, correct, MORE informative answer -- and `\bnot (in|...)\b`
+    matched inside the aside, so all three runs scored "declined to answer a
+    question the data supports". The denial has to be in the answer's own voice.
     """
-    return bool(_DENIES.search(text or ""))
+    return bool(_DENIES.search(_ASIDE.sub(" ", text or "")))
 
 
 def claims_yes(text: str) -> bool:

@@ -519,3 +519,62 @@ class TestTheCopulaYes:
         for answer in ("The answer is yes.", "Offered next spring: the forecast was yes.",
                        "It will be yes if the pattern holds."):
             assert claims_yes(answer), answer
+
+
+class TestAnAsideIsNotARefusal:
+    """The agent began annotating a prerequisite the catalog does not carry:
+
+        "Yes -- you are eligible. 00960211 requires any one of 00940224 (Data
+         Structures and Algorithms), 00940226 (not in the course catalog)."
+
+    A confident, correct, MORE informative answer -- and `\\bnot (in|...)\\b`
+    matched inside the parenthetical, so all three runs of
+    `eligibility_00960211` scored "declined to answer a question the data
+    supports". 3/3 became 0/3 with nothing wrong with the agent.
+
+    A note attached to ONE item is not the answer refusing the question, so the
+    denial has to be in the answer's own voice.
+    """
+
+    def test_the_annotated_answer_does_not_read_as_a_refusal(self) -> None:
+        from evaluation.checks import denies_knowledge
+
+        assert not denies_knowledge(
+            "Yes — you are eligible. 00960211 requires any one of 00940224 "
+            "(Data Structures and Algorithms), 00940226 (not in the course catalog)."
+        )
+
+    def test_a_denial_in_the_answers_own_voice_still_counts(self) -> None:
+        from evaluation.checks import denies_knowledge
+
+        for text in (
+            "00999999 is not in the catalog, so I cannot say anything about it.",
+            "No such record exists for that course.",
+            "I could not determine who teaches that course.",
+        ):
+            assert denies_knowledge(text), text
+
+
+class TestTheContractionThatNeverMatched:
+    """`can ?n[o']?t` matches "cannot" and "can not" and never "can't".
+
+    "I can't confirm whether you met the deadline" is a textbook denial and read
+    as none -- the pessimistic direction, which hides real regressions in a
+    crowd of false ones.
+    """
+
+    def test_cant_is_a_denial(self) -> None:
+        from evaluation.checks import denies_knowledge
+
+        assert denies_knowledge("I can't confirm whether you met the deadline.")
+
+    def test_couldnt_is_a_denial(self) -> None:
+        from evaluation.checks import denies_knowledge
+
+        assert denies_knowledge("I couldn't find a recorded grade.")
+
+    def test_the_uncontracted_forms_still_work(self) -> None:
+        from evaluation.checks import denies_knowledge
+
+        assert denies_knowledge("I cannot determine who teaches that course.")
+        assert denies_knowledge("I could not confirm that course.")
