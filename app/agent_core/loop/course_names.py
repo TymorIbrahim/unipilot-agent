@@ -174,6 +174,57 @@ def set_catalog_names(names: dict[str, str]) -> None:
     _catalog_names = dict(names)
 
 
+_ALREADY_NAMED = re.compile(r"\A\s*[（(]")
+
+
+def pair_codes_with_names(text: str) -> str:
+    """Show a course code with its name the first time the answer mentions it.
+
+    A live answer, and the reason this exists:
+
+        "You need 00960324 first. It has 2 prerequisite options: 00940314,
+         00980413. 0 of those are already on your passed list..."
+
+    Every claim in it is derived and none of it tells a student which courses
+    those are. Reading it means opening the catalog three times.
+
+    FIRST MENTION ONLY. Repeating the name at every occurrence turns a two-line
+    answer into a paragraph, and the reader already has it.
+
+    SKIPPED when the name is already on that line, which is the normal case for
+    a `:detail` plan row -- those project `title` next to the number, and
+    pairing there would print it twice.
+
+    The name is read from the catalog in code, never from the model. A
+    fabricated name attached to a real code is worse than no name, because
+    nothing about it invites doubt -- and the grounding invariant checks
+    numerals, so a typed course name is never validated.
+    """
+    body = text or ""
+    if not body:
+        return body
+    seen: set[str] = set()
+
+    def name_it(match: "re.Match[str]") -> str:
+        code = match.group(0)
+        if code in seen:
+            return code
+        name = course_display_name(code)
+        if not name:
+            return code
+        seen.add(code)
+        line_start = body.rfind("\n", 0, match.start()) + 1
+        line_end = body.find("\n", match.end())
+        line = body[line_start : line_end if line_end != -1 else len(body)]
+        if name in line:
+            return code
+        if _ALREADY_NAMED.match(body[match.end() :]):
+            return code
+        return f"{code} ({name})"
+
+    return _COURSE_CODE_IN_TEXT.sub(name_it, body)
+
+
 def reset_course_name_index() -> None:
     """Test hook -- the index is built from whichever graph engine is loaded."""
     _name_index.cache_clear()

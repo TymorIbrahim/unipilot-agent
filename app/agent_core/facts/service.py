@@ -26,7 +26,12 @@ from app.agent_core.facts.conversation import SupabaseConversations
 from app.agent_core.facts.loop import MAX_TURNS, LoopResult, run_loop
 from app.agent_core.facts.types import Basis, Scalar, ScalarKind
 from app.agent_core.facts.wiring import ModelExtractor, build_context
-from app.agent_core.loop.course_names import course_codes_in, course_display_name
+from app.agent_core.loop.course_names import (
+    course_codes_in,
+    course_display_name,
+    load_catalog_names,
+    pair_codes_with_names,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +133,13 @@ async def run_advice(
             reason=f"{UNKNOWN_STUDENT}: {user_id!r} has no record, so there is nothing to answer from",
             question=question,
         )
+
+    # Course names, so the answer can say WHICH courses it means. The loader has
+    # existed since the port and nothing ever called it, so both name sources
+    # were empty and `course_display_name` returned None for all 2613 courses --
+    # a capability that is written, tested, and connected to nothing. It is
+    # idempotent and cached in the module, so this costs one query per process.
+    await load_catalog_names()
 
     context = build_context(
         database, settings, _audience_of_profile(profile), **_extractor_override(chat)
@@ -395,7 +407,17 @@ def to_advice(result: LoopResult) -> Advice:
 
 
 def _answer_text(result: LoopResult) -> str:
-    """The student-facing prose for every outcome the loop can reach."""
+    """The student-facing prose for every outcome the loop can reach.
+
+    Every return here is wrapped in `pair_codes_with_names`, because a bare
+    8-digit code is unreadable in ANY outcome -- an answer, a partial, or the
+    confirmation text of a proposal. Doing it at the one seam they all pass
+    through is why it cannot be forgotten on the path nobody was looking at.
+    """
+    return pair_codes_with_names(_answer_body(result))
+
+
+def _answer_body(result: LoopResult) -> str:
     if result.outcome == "answered" and result.answer is not None:
         return result.answer.text
     if result.outcome == "declined":
