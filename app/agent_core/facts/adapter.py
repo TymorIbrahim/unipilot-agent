@@ -99,6 +99,13 @@ their transcript, plan, profile, grades -- are structured data you read with
     free-elective a degree needs -- is written on the track's wiki PAGE; reach
     it with `search_corpus` then `interpret` (one number per `interpret` call:
     the required total, the elective total, and so on).
+  - A REQUIREMENT STATED AS A TOTAL PLUS A PART NEEDS THE PHRASE, not one digit.
+    "Minimum 12 credits, of which at least 6 must be enrichment courses" holds
+    two true numbers answering different questions, and asking for a quantity
+    returns whichever the extractor reaches first. Asked how many all-Technion
+    elective credits were needed, that answered 6 -- the sub-clause -- where the
+    requirement is 12. Ask for the whole phrase (expect "text") and let the
+    answer say which figure is which.
   - WHEN THE UNIT CARRIES THE MEANING, interpret the PHRASE, not the digit.
     Ask for a text value ("2 English-language courses") rather than a quantity
     (2), whenever the passage counts things that are not credits -- courses,
