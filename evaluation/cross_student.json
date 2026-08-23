@@ -1,0 +1,530 @@
+{
+  "truth": {
+    "6a557a040edefb30367854ce": {
+      "program": "track-computer-science-general-4year",
+      "semester": "2025-1",
+      "cap": 18.0,
+      "passed_courses": 10,
+      "completed": 39.5,
+      "required": 155.0,
+      "remaining": 115.5,
+      "gpa": 80.71,
+      "semesters_left": 7
+    },
+    "6a5688319341471497d58c59": {
+      "program": "track-data-information-engineering",
+      "semester": "2025-3",
+      "cap": 18.0,
+      "passed_courses": 5,
+      "completed": 22.0,
+      "required": 155.0,
+      "remaining": 133.0,
+      "gpa": 87.57,
+      "semesters_left": 8
+    },
+    "6a578a2da43a2cfe1bcc791c": {
+      "program": "track-information-systems-engineering",
+      "semester": "2025-2",
+      "cap": 18.0,
+      "passed_courses": 41,
+      "completed": 129.5,
+      "required": 155.0,
+      "remaining": 25.5,
+      "gpa": 74.45,
+      "semesters_left": 2
+    },
+    "6a5cc147ff67a48db62d884b": {
+      "program": "track-information-systems-engineering",
+      "semester": "2025-2",
+      "cap": 18.0,
+      "passed_courses": 17,
+      "completed": 62.5,
+      "required": 155.0,
+      "remaining": 92.5,
+      "gpa": 83.89,
+      "semesters_left": 6
+    }
+  },
+  "results": [
+    {
+      "student": "6a557a040edefb30367854ce",
+      "program": "track-computer-science-general-4year",
+      "probe": "completed",
+      "prompt": "How many credits have I completed so far?",
+      "expected": 39.5,
+      "answer": "You have completed 39.5 credits so far.",
+      "correct": true,
+      "elapsed_s": 7.3,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a557a040edefb30367854ce",
+      "program": "track-computer-science-general-4year",
+      "probe": "required",
+      "prompt": "What is the total credit requirement for my degree?",
+      "expected": 155.0,
+      "answer": "The total credit requirement for your degree is 155.",
+      "correct": true,
+      "elapsed_s": 1.9,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a557a040edefb30367854ce",
+      "program": "track-computer-science-general-4year",
+      "probe": "remaining",
+      "prompt": "How many credits do I still need to graduate?",
+      "expected": 115.5,
+      "answer": "You still need 115.5 credits to graduate.",
+      "correct": true,
+      "elapsed_s": 1.7,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a557a040edefb30367854ce",
+      "program": "track-computer-science-general-4year",
+      "probe": "gpa",
+      "prompt": "What is my GPA?",
+      "expected": 80.71,
+      "answer": "Your GPA is 80.71.",
+      "correct": true,
+      "elapsed_s": 5.0,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 2,
+      "tools": [
+        "compute",
+        "find"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a557a040edefb30367854ce",
+      "program": "track-computer-science-general-4year",
+      "probe": "semesters",
+      "prompt": "How many semesters until I graduate?",
+      "expected": 7,
+      "answer": "You need 7 semesters to graduate, based on 115.5 more credits and a cap of 18 per semester.",
+      "correct": true,
+      "elapsed_s": 3.4,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 1,
+      "tools": [
+        "compute"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5688319341471497d58c59",
+      "program": "track-data-information-engineering",
+      "probe": "completed",
+      "prompt": "How many credits have I completed so far?",
+      "expected": 22.0,
+      "answer": "You have completed 22 credits so far.",
+      "correct": true,
+      "elapsed_s": 1.7,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5688319341471497d58c59",
+      "program": "track-data-information-engineering",
+      "probe": "required",
+      "prompt": "What is the total credit requirement for my degree?",
+      "expected": 155.0,
+      "answer": "The total credit requirement for your degree is 155 credits.",
+      "correct": true,
+      "elapsed_s": 1.6,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5688319341471497d58c59",
+      "program": "track-data-information-engineering",
+      "probe": "remaining",
+      "prompt": "How many credits do I still need to graduate?",
+      "expected": 133.0,
+      "answer": "You still need 133 credits to graduate.",
+      "correct": true,
+      "elapsed_s": 1.3,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5688319341471497d58c59",
+      "program": "track-data-information-engineering",
+      "probe": "gpa",
+      "prompt": "What is my GPA?",
+      "expected": 87.57,
+      "answer": "Your GPA is 87.57.",
+      "correct": true,
+      "elapsed_s": 5.1,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 2,
+      "tools": [
+        "compute",
+        "find"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5688319341471497d58c59",
+      "program": "track-data-information-engineering",
+      "probe": "semesters",
+      "prompt": "How many semesters until I graduate?",
+      "expected": 8,
+      "answer": "You need 8 semesters to graduate, based on 133 more credits and a cap of 18 per semester.",
+      "correct": true,
+      "elapsed_s": 3.5,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 1,
+      "tools": [
+        "compute"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a578a2da43a2cfe1bcc791c",
+      "program": "track-information-systems-engineering",
+      "probe": "completed",
+      "prompt": "How many credits have I completed so far?",
+      "expected": 129.5,
+      "answer": "You have completed 129.5 credits so far.",
+      "correct": true,
+      "elapsed_s": 1.3,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a578a2da43a2cfe1bcc791c",
+      "program": "track-information-systems-engineering",
+      "probe": "required",
+      "prompt": "What is the total credit requirement for my degree?",
+      "expected": 155.0,
+      "answer": "Your degree requires 155 credits.",
+      "correct": true,
+      "elapsed_s": 1.2,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a578a2da43a2cfe1bcc791c",
+      "program": "track-information-systems-engineering",
+      "probe": "remaining",
+      "prompt": "How many credits do I still need to graduate?",
+      "expected": 25.5,
+      "answer": "You still need 25.5 credits to graduate.",
+      "correct": true,
+      "elapsed_s": 1.7,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a578a2da43a2cfe1bcc791c",
+      "program": "track-information-systems-engineering",
+      "probe": "gpa",
+      "prompt": "What is my GPA?",
+      "expected": 74.45,
+      "answer": "Your GPA is 74.45.",
+      "correct": true,
+      "elapsed_s": 3.3,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 2,
+      "tools": [
+        "compute",
+        "find"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a578a2da43a2cfe1bcc791c",
+      "program": "track-information-systems-engineering",
+      "probe": "semesters",
+      "prompt": "How many semesters until I graduate?",
+      "expected": 2,
+      "answer": "You need 25.5 more credits, so it will take 2 semesters to graduate.",
+      "correct": true,
+      "elapsed_s": 6.7,
+      "status": "ok",
+      "steps": 3,
+      "reasoning_turns": 3,
+      "tool_calls": 1,
+      "tools": [
+        "compute"
+      ],
+      "modules": {
+        "ReasoningLoop": 3
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 1,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 2,
+      "wasted": 1
+    },
+    {
+      "student": "6a5cc147ff67a48db62d884b",
+      "program": "track-information-systems-engineering",
+      "probe": "completed",
+      "prompt": "How many credits have I completed so far?",
+      "expected": 62.5,
+      "answer": "You have completed 62.5 credits so far.",
+      "correct": true,
+      "elapsed_s": 3.8,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5cc147ff67a48db62d884b",
+      "program": "track-information-systems-engineering",
+      "probe": "required",
+      "prompt": "What is the total credit requirement for my degree?",
+      "expected": 155.0,
+      "answer": "Your degree requires 155 credits.",
+      "correct": true,
+      "elapsed_s": 4.7,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5cc147ff67a48db62d884b",
+      "program": "track-information-systems-engineering",
+      "probe": "remaining",
+      "prompt": "How many credits do I still need to graduate?",
+      "expected": 92.5,
+      "answer": "You still need 92.5 credits to graduate.",
+      "correct": true,
+      "elapsed_s": 5.2,
+      "status": "ok",
+      "steps": 1,
+      "reasoning_turns": 1,
+      "tool_calls": 0,
+      "tools": [],
+      "modules": {
+        "ReasoningLoop": 1
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5cc147ff67a48db62d884b",
+      "program": "track-information-systems-engineering",
+      "probe": "gpa",
+      "prompt": "What is my GPA?",
+      "expected": 83.89,
+      "answer": "Your GPA is 83.89.",
+      "correct": true,
+      "elapsed_s": 8.5,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 2,
+      "tools": [
+        "compute",
+        "find"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    },
+    {
+      "student": "6a5cc147ff67a48db62d884b",
+      "program": "track-information-systems-engineering",
+      "probe": "semesters",
+      "prompt": "How many semesters until I graduate?",
+      "expected": 6,
+      "answer": "You need 6 semesters to graduate, based on 92.5 remaining credits and a cap of 18 per semester.",
+      "correct": true,
+      "elapsed_s": 9.7,
+      "status": "ok",
+      "steps": 2,
+      "reasoning_turns": 2,
+      "tool_calls": 1,
+      "tools": [
+        "compute"
+      ],
+      "modules": {
+        "ReasoningLoop": 2
+      },
+      "turns_reporting_a_defect": 0,
+      "turns_after_a_rejection": 0,
+      "repeated_identical_calls": 0,
+      "answer_attempts": 1,
+      "wasted": 0
+    }
+  ]
+}
