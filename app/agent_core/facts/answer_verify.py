@@ -44,6 +44,7 @@ from app.agent_core.facts.postconditions import (
     check_no_edge_identifiers,
     check_periods_are_whole,
     check_count_states_its_basis,
+    check_term_within_requested_cap,
     check_no_group_identifiers,
     check_no_join_side_labels,
     check_no_object_identifiers,
@@ -154,12 +155,20 @@ def verify_answer(
     # where 38.5 was 16 + 13.5 + 9 across three terms, each of them legal. The
     # model spent its remaining rejections on that and the run returned nothing.
     cap = _credit_cap(facts)
+    # A limit the student stated in the request, which outranks their profile
+    # cap and which nothing else here can see -- a 16-credit term against a
+    # requested 10 cleared both checks below, since the profile allows 18.
+    requested = _requested_cap(question)
     for name, term_courses in collections:
         for label, group in _by_term(name, term_courses):
             group_credits = sum(course.credits for course in group)
             violations += check_term_load(group_credits, label)
             if cap is not None:
                 violations += check_term_within_cap(group_credits, cap, label)
+            if requested is not None:
+                violations += check_term_within_requested_cap(
+                    group_credits, requested, label
+                )
 
     # The plan WHOLE, against what the degree still needs. Every check above is
     # per term and all of them pass a plan that schedules every unfinished course
@@ -309,6 +318,45 @@ def _standing(facts: Mapping[str, HeldFact]) -> Standing | None:
 def _floor(question: str) -> float | None:
     match = _FLOOR.search(question)
     return float(match.group(1)) if match else None
+
+
+_REQUESTED_CAP = re.compile(
+    # English: a limit word, a number, then a credit noun. All three required.
+    r"(?:under|below|at most|no more than|not more than|less than|max(?:imum)?(?:\s+of)?"
+    r"|cap(?:ped)?\s+at|within)\s*(\d+(?:\.\d+)?)\s*(?:credits?|points?|nekudot)"
+    # Hebrew: the same three parts, same order.
+    r"|(?:מתחת\s*ל|עד|לא\s*יותר\s*מ|פחות\s*מ|מקסימום|לכל\s*היותר|בתוך)"
+    r"\s*-?\s*(\d+(?:\.\d+)?)\s*(?:נקודות|נקודה|נק|קרדיטים|קרדיט)",
+    re.IGNORECASE,
+)
+"""A per-term credit limit stated in the REQUEST, in either language.
+
+All three parts are required -- a limit word, a number, and a credit noun -- and
+in that order, because the questions this must NOT fire on are full of bare
+numbers that mean something else. "I want to finish by summer 2027" and
+"starting from 2025-2" carry years; "what is the maximum number of credits I am
+allowed" carries the limit word and the credit noun but no figure, and reading
+one out of it would invent a constraint the student never set.
+
+Deliberately conservative in the same direction as everything else here: a cap
+this misses leaves today's behaviour, while a cap it invents refuses a correct
+plan."""
+
+
+def _requested_cap(question: str) -> float | None:
+    """The tightest per-term limit the question names, if it names one.
+
+    Tightest rather than first: a question that says both "under 10 credits" and
+    "no more than 12" has set 10, and honouring the looser of the two is the
+    same failure as honouring neither.
+    """
+    found = [
+        float(group)
+        for match in _REQUESTED_CAP.finditer(question or "")
+        for group in match.groups()
+        if group is not None
+    ]
+    return min(found) if found else None
 
 
 def _scalar_fact(facts: Mapping[str, HeldFact], names: tuple[str, ...]) -> float | None:

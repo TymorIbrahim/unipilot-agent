@@ -571,6 +571,45 @@ def check_term_within_cap(
     ]
 
 
+def check_term_within_requested_cap(
+    term_credits: float, requested: float, term_label: str = "a term"
+) -> list[Violation]:
+    """A limit the STUDENT named in the request outranks the one on their profile.
+
+    Asked "I'm working part-time next semester, so keep it under 10 credits",
+    the agent returned a 16-credit term. The profile cap is 18, so
+    `check_term_within_cap` passed it, `check_term_load`'s 40-credit ceiling
+    passed it, and the answer presented the plan as the recommendation. Nothing
+    in the system had any idea 10 had been said.
+
+    `plan_term` can enforce this -- it takes `max_credits` -- and the prompt
+    asks the model to pass it "if the request names a different limit". That is
+    a judgement call made once per run, and on the Hebrew phrasing of the same
+    question it was made wrong three times out of three. So it is checked, for
+    the same reason every other check in this file exists.
+
+    Distinct from `check_term_within_cap` in WHOSE limit it holds. The profile
+    cap is what the student can normally carry; this is what they have just said
+    they can carry THIS term, and it is the only one of the two the student is
+    actively watching. Advice that ignores it is worse than no advice: a student
+    who asked for a part-time load and got a full one either notices and stops
+    trusting the tool, or does not and over-commits.
+    """
+    if requested <= 0 or term_credits <= requested + _FLOOR_EPSILON:
+        return []
+    return [
+        Violation(
+            "term_over_requested_cap",
+            f"{term_label} totals {term_credits:g} credits, and the question asked for no more "
+            f"than {requested:g}. The limit in the REQUEST wins over the student's profile cap -- "
+            f"they have just told you what they can carry this term. Pass max_credits={requested:g} "
+            "to `plan_term` and let it seat a plan that fits, rather than reporting one that does "
+            "not. Do not simply drop courses from this list by hand: the planner is what checks "
+            "offerings, conflicts and prerequisites.",
+        )
+    ]
+
+
 _PERIOD_COUNT = re.compile(
     r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight"
     r"|שני|שניים|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|שישה|שש)\s+"
