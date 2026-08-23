@@ -11,10 +11,23 @@ than no name, because nothing about it invites doubt. So the name is read from
 the catalog here, in code, and slotted at the answer boundary exactly as every
 other grounded value is.
 
-Source is the course wiki page's frontmatter title, which reads
-`<code> — <English name> (<Hebrew name>)` and covers 2601 of 2611 course pages.
-`engine.graph.nodes[code]["name"]` is NOT the source: it is Hebrew-only and
-missing outright for some courses (00940704, 01040065 among them).
+Two sources, in order. The WIKI CORPUS page title reads
+`<code> — <English name> (<Hebrew name>)` and covers 2601 courses; it is
+preferred because its names are English. The Supabase CATALOG title covers all
+2613 rows but is Hebrew, and picks up the general electives and humanities the
+ISE wiki never covered.
+
+Both were dead through the port and neither said so. `_name_index` walked an
+in-process graph engine that does not exist in this deployment, and
+`load_catalog_names` read a setting this configuration does not define -- so
+both raised, both were swallowed (a missing name must never reach an answer as
+an exception), and `course_display_name` returned None for every course in the
+catalog. Every answer this agent ever gave carried bare 8-digit codes. Nothing
+in the logs but a warning nobody read.
+
+A course in NEITHER source stays a bare code. 00940226 is one: it is named by
+259 prerequisite edges and appears in no catalog row and no wiki page, which is
+a gap in the data rather than in this module.
 """
 
 from __future__ import annotations
@@ -35,6 +48,8 @@ _COURSE_CODE_IN_TEXT = re.compile(r"\b\d{8}\b")
 # A course code as the wiki RENDERS it: 8 digits with the leading zero dropped.
 # Used by `canonical_course_code` to restore it; see there for why.
 _SEVEN_DIGIT_CODE = re.compile(r"^\d{7}$")
+# A course page slug leads with the course code: `00940224-data-structures`.
+_SLUG_CODE = re.compile(r"^(\d{7,8})-")
 _FRONTMATTER_TITLE = re.compile(r"^title:\s*\"?(.+?)\"?\s*$", re.M)
 # The title's leading `<code> — ` prefix; the code is already in the answer.
 _TITLE_LEAD = re.compile(r"^\s*\d{6,8}\s*[—\-–]\s*")
@@ -67,23 +82,41 @@ def _name_index() -> dict[str, str]:
     Degrades to an empty index if the graph is not configured: a missing name
     costs readability, never correctness, so it must not raise into an answer.
     """
-    # Imported lazily, and optionally. In UniPilot this index was built from a
-    # live in-process graph engine; here the names are precomputed at seed time
-    # and injected via `set_catalog_names`, so there is no graph to consult and
-    # no reason for its absence to be an import-time error.
+    # Read from the WIKI CORPUS, which this deployment actually loads.
+    #
+    # In UniPilot this walked an in-process graph engine, and the port kept that
+    # call. There is no graph engine here, so the lookup raised on every call and
+    # was swallowed -- correctly, since a missing name must never reach an
+    # answer as an exception. The result was an index of size 0 while the corpus
+    # sitting in the same process held 2601 course pages whose titles are
+    # already in the exact shape `_english_name` parses:
+    #
+    #     "00940224 — Data Structures and Algorithms (מבני נתונים ואלגוריתמים)"
+    #
+    # The docstring above this module has always claimed that coverage. It was
+    # right about the data and wrong about the door.
     try:
-        from app.retrieval.graph_engine.graph_registry import graph_registry
+        from app.retrieval.corpus import get_corpus
 
-        engine = graph_registry.get_engine()
-    except Exception:  # noqa: BLE001 -- an absent graph is the normal case here
+        corpus = get_corpus()
+    except Exception:  # noqa: BLE001 -- a missing name costs readability, never correctness
+        logger.warning("wiki corpus unavailable for course names", exc_info=True)
         return {}
+    if corpus is None:
+        return {}
+
     index: dict[str, str] = {}
-    for slug, code in engine.slug_to_course_code.items():
-        content = (engine.wiki_pages.get(slug) or {}).get("content") or ""
-        title = _FRONTMATTER_TITLE.search(content[:_FRONTMATTER_SCAN_CHARS])
-        if not title:
+    for chunk in corpus.chunks:
+        # A course page's slug leads with its code: `00940224-data-structures`.
+        # The code is NOT read from `primary_course_number`, which is unset on
+        # every chunk in the shipped artifact.
+        match = _SLUG_CODE.match(chunk.slug or "")
+        if not match:
             continue
-        name = _english_name(title.group(1))
+        code = canonical_course_code(match.group(1))
+        if not _COURSE_CODE.match(code) or code in index:
+            continue
+        name = _english_name(chunk.page_title or "")
         if name:
             index[code] = name
     return index

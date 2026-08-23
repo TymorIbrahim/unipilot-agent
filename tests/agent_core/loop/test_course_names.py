@@ -10,19 +10,17 @@ eight-digit code from the catalog name the same course. Get it wrong in either
 direction and a course silently fails to match -- or a six-digit program code
 becomes an eight-digit course that does not exist.
 
-WHAT IS NOT. The suite's other half tested `course_display_name` resolving codes
-to English names from the wiki. That path cannot fire in this deployment:
-`_name_index` reads an in-process graph engine that does not exist here and
-returns `{}` unconditionally, `load_catalog_names()` has no call site, and so
-`course_display_name` returns None for every input. Everything downstream falls
-back to the bare code, which is correct behaviour and exactly the readability
-problem the module was written to solve.
+WHAT WAS NOT, AND NOW IS. This suite's other half tested `course_display_name`
+resolving codes to English names, and was rewritten to assert that it CANNOT --
+"a dead path, not a broken one". That was wrong, and it made the suite guard the
+defect: `_name_index` walked a graph engine absent from this deployment while
+the wiki corpus loaded in the same process held 2601 course titles in exactly
+the format it parses, and `load_catalog_names` had no call site. Both are wired
+now, and every answer between the port and that fix carried bare 8-digit codes.
 
-That is not repaired here -- it is a dead path, not a broken one, and the names
-a student actually sees in a plan come from `plan_term`'s own `courseTitle`.
-What is pinned is the FALLBACK, so the day someone wires `load_catalog_names`
-the tests say what it has to do, and so nobody reads the module and assumes it
-is already doing it.
+The lesson is in the old docstring, which had it right and drew the opposite
+conclusion: "returns None" and "is broken" look identical from a call site. When
+they do, find out which -- do not pin it.
 """
 
 from __future__ import annotations
@@ -87,18 +85,33 @@ class TestScanningProseForCodes:
         assert course_codes_in("") == set()
 
 
-class TestTheDisplayNamePathIsInert:
-    """Pinned as behaviour, not left as a comment, because "returns None" and
-    "is broken" look identical from a call site."""
+class TestTheDisplayNamePathResolves:
+    """This class used to be `TestTheDisplayNamePathIsInert`, and asserted the
+    opposite of what it does now.
 
-    def test_no_name_resolves_without_a_catalog(self) -> None:
-        """`_name_index` needs a graph engine this deployment does not have, and
-        nothing calls `load_catalog_names`, so every lookup falls back."""
-        assert course_display_name("00940224") is None
-        assert course_display_name("00960211") is None
+    Its docstring read: "Pinned as behaviour, not left as a comment, because
+    'returns None' and 'is broken' look identical from a call site." That
+    observation was exactly right and the conclusion was backwards -- the path
+    was not inert by design, it was broken by the port, and pinning it made the
+    suite guard the bug. Every answer the agent gave carried bare 8-digit codes
+    for as long as this passed.
 
-    def test_an_unknown_code_has_no_name_either(self) -> None:
+    `_name_index` walked a graph engine this deployment does not have while the
+    wiki corpus in the same process held 2601 course titles; `load_catalog_names`
+    was never called. Both are wired now, so the assertion is inverted.
+    """
+
+    def test_a_wiki_name_resolves(self) -> None:
+        assert course_display_name("00940224") == "Data Structures and Algorithms"
+
+    def test_an_unknown_code_has_no_name(self) -> None:
         assert course_display_name("99999999") is None
+
+    def test_a_code_in_neither_source_stays_bare(self) -> None:
+        """00940226 is named by 259 prerequisite edges and appears in no catalog
+        row and no wiki page. That is a gap in the DATA, and the honest
+        rendering is the bare code rather than an invented name."""
+        assert course_display_name("00940226") is None
 
 
 class TestTheFallbackIsReadyIfItIsEverWired:

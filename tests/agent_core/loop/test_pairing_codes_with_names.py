@@ -26,17 +26,24 @@ from app.agent_core.loop.course_names import (
     set_catalog_names,
 )
 
-NAMES = {
-    "00960324": "הנדסת מערכות שירות",
-    "00940314": "מודלים סטוכסטיים בחקר בצועים",
+# The real wiki names, which is what production resolves. Asserting against
+# seeded stand-ins would have hidden that the wiki source outranks the catalog.
+WIKI = {
+    "00960324": "Service Systems Engineering",
+    "00940314": "Stochastic Models in Operations Research",
+}
+# No wiki page, so these fall back to the catalog's Hebrew title. A real answer
+# mixes the two, and the reported one did: 00940224 was named and 00940226 was
+# not, in the same sentence.
+CATALOG_ONLY = {
     "00980413": "תהליכים סטוכסטיים",
-    "00940704": "סדנת תכנות בשפת סי",
+    "03240305": "היסטוריה של המדע",
 }
 
 
 @pytest.fixture(autouse=True)
 def _names():
-    set_catalog_names(NAMES)
+    set_catalog_names(CATALOG_ONLY)
     yield
     reset_course_name_index()
 
@@ -48,20 +55,27 @@ class TestPairingTheCodeWithItsName:
             "00980413."
         )
         assert pair_codes_with_names(reported) == (
-            "You need 00960324 (הנדסת מערכות שירות) first. It has 2 prerequisite "
-            "options: 00940314 (מודלים סטוכסטיים בחקר בצועים), "
-            "00980413 (תהליכים סטוכסטיים)."
+            f"You need 00960324 ({WIKI['00960324']}) first. It has 2 prerequisite "
+            f"options: 00940314 ({WIKI['00940314']}), "
+            f"00980413 ({CATALOG_ONLY['00980413']})."
+        )
+
+    def test_the_catalog_fallback_names_what_the_wiki_does_not(self) -> None:
+        """The wiki covers 2601 courses; a student's record also carries general
+        electives and humanities that were never wiki'd."""
+        assert pair_codes_with_names("You took 03240305.") == (
+            "You took 03240305 (היסטוריה של המדע)."
         )
 
     def test_only_the_first_mention_is_named(self) -> None:
         """Repeating it at every occurrence turns two lines into a paragraph."""
         out = pair_codes_with_names("00960324 blocks you; take 00960324 next term.")
-        assert out.count("הנדסת מערכות שירות") == 1
-        assert out.startswith("00960324 (הנדסת מערכות שירות)")
+        assert out.count(WIKI["00960324"]) == 1
+        assert out.startswith(f"00960324 ({WIKI['00960324']})")
 
     def test_a_detail_row_already_carrying_the_title_is_left_alone(self) -> None:
         """A plan row projects `title` beside the number; pairing would double it."""
-        row = "- קורס 00940704 · שם סדנת תכנות בשפת סי · נקודות 1.5"
+        row = f"- course 00960324 · title {WIKI['00960324']} · credits 3"
         assert pair_codes_with_names(row) == row
 
     def test_a_code_with_no_known_name_is_untouched(self) -> None:
@@ -89,10 +103,17 @@ class TestPairingTheCodeWithItsName:
 
 
 class TestTheNameSourceIsActuallyConnected:
-    def test_the_catalog_fallback_resolves(self) -> None:
-        """The regression that made every answer show bare codes: both sources
-        empty, and nothing raising to say so."""
-        assert course_display_name("00960324") == "הנדסת מערכות שירות"
+    def test_the_wiki_source_resolves(self) -> None:
+        """The regression that made every answer show bare codes: BOTH sources
+        dead, and nothing raising to say so."""
+        assert course_display_name("00960324") == WIKI["00960324"]
+
+    def test_a_course_in_neither_source_stays_a_bare_code(self) -> None:
+        """00940226 is named by 259 prerequisite edges and sits in no catalog row
+        and no wiki page -- a gap in the DATA. A bare code is the honest render;
+        an invented name would be worse, because nothing about it invites doubt."""
+        assert course_display_name("00940226") is None
+        assert pair_codes_with_names("It requires 00940226.") == "It requires 00940226."
 
     def test_a_non_code_is_not_looked_up(self) -> None:
         for value in ("129.5", "abc", "", "0096032"):
