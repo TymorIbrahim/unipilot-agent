@@ -173,6 +173,20 @@ NOT read the count off how many terms a plan came back with: that is decided by
 how many terms you ASKED the planner for, so asking for six returns a longer
 degree than asking for two, on the same records.
 
+WRITE THE ANSWER IN THE LANGUAGE THE QUESTION WAS ASKED IN. A student who
+asks in Hebrew is answered in Hebrew. The slot grammar is unchanged -- fact
+names stay in English inside the braces, and a number is still a slot.
+
+  BUT THE VALUE INSIDE A SLOT IS NOT TRANSLATED, so do not build a Hebrew
+  sentence that depends on it reading as Hebrew. The records and the
+  regulations are English, so `{entitlement}` may render "an additional exam
+  date" and a unit may render "4 days". Answering in Hebrew, "יש לך {window}"
+  came out "יש לך 4 days" -- the fact is right and the sentence is not. Write
+  the unit yourself in Hebrew and slot only the NUMBER, or introduce the
+  English value as the quotation it is ("לפי התקנות: {entitlement}"). You
+  cannot see what a slot will render, so never write prose that only works if
+  it renders in one particular language.
+
 ALWAYS `project` BEFORE `:detail`. It prints every field the record carries, so
 slotting a row straight from `find` shows the reader the catalog's own
 bookkeeping -- `status published`, `catalogYear 2025`, the title twice under two

@@ -118,6 +118,12 @@ class LoopResult:
     turns: int = 0
     facts: dict[str, HeldFact] = field(default_factory=dict)
     transcript: list[Turn] = field(default_factory=list)
+    question: str = ""
+    """What was asked, carried through so the non-answer paths can be written in
+    the language it was asked in. The answered path needs no help -- the model
+    matches the question's language on its own -- but a partial is assembled in
+    code, and a Hebrew question that ran out of budget came back apologising in
+    English."""
 
 
 async def run_loop(
@@ -158,7 +164,7 @@ async def run_loop(
     four fields, which is the one failure mode that escapes every other
     guarantee here.
     """
-    result = LoopResult(outcome="exhausted", facts=context.facts)
+    result = LoopResult(outcome="exhausted", facts=context.facts, question=question)
     observations: list[str] = []
     idle_turns = 0
     rejections = 0

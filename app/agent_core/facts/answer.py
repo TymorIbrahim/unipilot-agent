@@ -417,7 +417,59 @@ def _tidy_affirmations(text: str) -> str:
     """
     tidied = _DOUBLED_YES.sub(lambda m: m.group(1), text)
     tidied = _STRANDED_YES.sub(_repair_stranded, tidied)
-    return _STUTTERED_PHRASE.sub(lambda m: m.group(1), tidied)
+    tidied = _STUTTERED_PHRASE.sub(lambda m: m.group(1), tidied)
+    return _SCRIPT_SEAM.sub(_repair_seam, tidied)
+
+
+_HEBREW_PREFIX = set("בלכמשהו")
+"""The single letters Hebrew writes closed up against the next word.
+
+Only these take the hyphen form before a foreign word. A Hebrew letter that ends
+a whole word ("תקיןOK") is a plain run-together and wants an ordinary space."""
+
+
+def _repair_seam(match: "re.Match[str]") -> str:
+    """Separate the two scripts, the way Hebrew actually writes the seam.
+
+    A lone prefix letter takes a hyphen -- ל-an, ב-Winter -- which is the
+    standard form for attaching one to a foreign word. Anything else takes a
+    space. Both are only ever an INSERTION: no character on either side is
+    changed, so this cannot alter what the answer claims.
+    """
+    if match.group(1):
+        hebrew, latin = match.group(1), match.group(2)
+        joiner = "-" if _is_lone_prefix(match.string, match.start(1), hebrew) else " "
+        return f"{hebrew}{joiner}{latin}"
+    return f"{match.group(3)} {match.group(4)}"
+
+
+def _is_lone_prefix(text: str, index: int, letter: str) -> bool:
+    """A prefix letter standing alone -- start of text, or preceded by a space."""
+    if letter not in _HEBREW_PREFIX:
+        return False
+    return index == 0 or not text[index - 1].isalpha()
+
+
+_SCRIPT_SEAM = re.compile(r"([֐-׿])([A-Za-z])|([A-Za-z])([֐-׿])")
+"""A Hebrew letter and a Latin letter with nothing between them.
+
+Asked in Hebrew, the model answers in Hebrew, and the facts it slots are often
+English -- the regulations corpus is English, so `interpret` returns English
+phrases. That is fine until a slot lands after one of Hebrew's single-letter
+prefixes, which attach directly to the word they govern with no space. A live
+answer shipped:
+
+    אתה זכאי לan additional exam date
+
+The template was "אתה זכאי ל{entitlement}" and it is CORRECT Hebrew -- ל is
+written closed up against a Hebrew word. Against a Latin one it needs the
+space, and the model cannot know which it will get because it never sees the
+value. So the seam is repaired here, where both sides are known.
+
+Digits are deliberately excluded. "2 סמסטרים" already spaces itself, and Hebrew
+attaches numerals with a hyphen ("ב-10 נקודות") which is a separator this would
+not see anyway -- adding a rule for them would only put spaces inside forms that
+are already right."""
 
 
 def _repair_stranded(match: "re.Match[str]") -> str:

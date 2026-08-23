@@ -14,6 +14,7 @@ into the working set itself.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -102,7 +103,11 @@ async def run_advice(
     if chat is None and build_chat_llm(settings=settings) is None:
         # No credentials. A loop with no model cannot run; surface it as an
         # honest non-answer rather than crashing the route.
-        return LoopResult(outcome="exhausted", reason="no language model is configured")
+        return LoopResult(
+            outcome="exhausted",
+            reason="no language model is configured",
+            question=question,
+        )
 
     database = await get_database()
 
@@ -121,6 +126,7 @@ async def run_advice(
         return LoopResult(
             outcome="refused",
             reason=f"{UNKNOWN_STUDENT}: {user_id!r} has no record, so there is nothing to answer from",
+            question=question,
         )
 
     context = build_context(
@@ -429,6 +435,29 @@ _PARTIAL_SUFFIX = (
     "Ask me for one piece at a time -- a single term's plan, or just the number of "
     "semesters -- and I can finish it."
 )
+
+_HEBREW = re.compile(r"[֐-׿]")
+
+_PARTIAL_PREFIX_BY_OUTCOME_HE = {
+    "exhausted": "לא הספקתי לסיים את זה, אבל הנה מה שכן הצלחתי לברר מהרשומות שלך:",
+    "refused": "לא הצלחתי להרכיב את התשובה המלאה בביטחון, אבל הנה מה שכן בררתי "
+               "מהרשומות שלך:",
+    "stalled": "נתקעתי באמצע, אבל הנה מה שכן הצלחתי לברר מהרשומות שלך:",
+}
+_PARTIAL_SUFFIX_HE = (
+    "אפשר לשאול אותי דבר אחד בכל פעם — תכנון של סמסטר בודד, או רק מספר "
+    "הסמסטרים — ואז אוכל להשלים."
+)
+"""The same three sentences, for a question asked in Hebrew.
+
+The ANSWERED path needed nothing: asked in Hebrew the model replies in Hebrew,
+nine live runs out of ten. This path is different in kind -- it is assembled in
+code, precisely because there is no budget left for a model call -- so it said
+what it was written to say regardless of who was reading. A Hebrew question that
+ran out of budget came back apologising in English and then listing its facts.
+
+A lookup, not a translation call: the failing path is the one that must not cost
+anything."""
 def _not_worth_reporting() -> frozenset[str]:
     """Facts the ROUTE seeded, which the run did not learn.
 
@@ -474,10 +503,14 @@ def _partial_from_facts(result: LoopResult) -> str | None:
     if not scalars:
         return None
     lines = [f"- {name.replace('_', ' ')}: {_render_scalar(held.value)}" for name, held in scalars]
-    prefix = _PARTIAL_PREFIX_BY_OUTCOME.get(
-        result.outcome, _PARTIAL_PREFIX_BY_OUTCOME["refused"]
-    )
-    return "\n".join([prefix, *lines, "", _PARTIAL_SUFFIX])
+    hebrew = bool(_HEBREW.search(result.question or ""))
+    prefixes = _PARTIAL_PREFIX_BY_OUTCOME_HE if hebrew else _PARTIAL_PREFIX_BY_OUTCOME
+    prefix = prefixes.get(result.outcome, prefixes["refused"])
+    suffix = _PARTIAL_SUFFIX_HE if hebrew else _PARTIAL_SUFFIX
+    # The fact NAMES stay as derived -- they are the names the run used, and
+    # inventing Hebrew for them here would be labelling a number with a word no
+    # part of the system ever called it.
+    return "\n".join([prefix, *lines, "", suffix])
 
 
 def _render_scalar(value: Scalar) -> str:

@@ -31,6 +31,21 @@ from dataclasses import dataclass
 MIN_GRADE = 0.0
 MAX_GRADE = 100.0
 
+_PERIOD_NOUN = r"semesters?|terms?|years?|סמסטרים|סמסטר|שנים|שנה"
+"""The unit every period check turns on, in both languages the agent answers in.
+
+Nothing said which language to answer in, and asked in Hebrew the model answers
+in Hebrew -- nine of ten did. Every prose check here was an English-only regex,
+so they did not fail on those answers, they went SILENT on them, which is the
+worse failure: `check_count_states_its_basis` was built because three runs
+shipped "2 semesters" with no basis, and the Hebrew twin shipped
+"נשארו לך 2 סמסטרים" past a guard that was looking for the word "semesters".
+
+Kept in ONE place rather than spelled out in each regex below, because the cost
+of the bug was three checks going dark at once and the fix should not be three
+edits that can drift apart.
+"""
+
 MAX_TERM_CREDITS = 40.0
 """A sanity ceiling on ONE term's planned credits -- roughly twice a full load.
 A term far above this is not a heavy schedule; it is the `optimize` output's
@@ -354,7 +369,7 @@ def check_alternatives_are_distinct(text: str, question: str = "") -> list[Viola
 
 
 _FRACTIONAL_PERIOD = re.compile(
-    r"(\d+\.\d+)\s+(semesters?|terms?|years?)\b", re.IGNORECASE
+    rf"(\d+\.\d+)\s+({_PERIOD_NOUN})\b", re.IGNORECASE
 )
 
 
@@ -557,8 +572,10 @@ def check_term_within_cap(
 
 
 _PERIOD_COUNT = re.compile(
-    r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight)\s+"
-    r"(?:more\s+|additional\s+|further\s+|extra\s+)?(?:semesters?|terms?)\b",
+    r"\b(\d{1,2}|one|two|three|four|five|six|seven|eight"
+    r"|שני|שניים|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|שישה|שש)\s+"
+    r"(?:more\s+|additional\s+|further\s+|extra\s+|עוד\s+)?"
+    r"(?:semesters?|terms?|סמסטרים|סמסטר)\b",
     re.IGNORECASE,
 )
 
@@ -578,7 +595,15 @@ _ASKS_HOW_LONG = re.compile(
     r"|\bhow long\b.{0,40}\b(?:graduat|finish|degree|left)"
     r"|\b(?:when|by when)\b.{0,30}\bgraduat"
     r"|\b(?:semesters?|terms?)\b.{0,20}\b(?:to|until|left|remain).{0,20}\bgraduat"
-    r"|\bgraduat\w*\b.{0,40}\bhow (?:many|long)\b",
+    r"|\bgraduat\w*\b.{0,40}\bhow (?:many|long)\b"
+    # Hebrew, scoped exactly as tightly as the English above. "כמה" alone is
+    # NOT enough: "כמה זמן יש לי לערער על ציון" is an appeal-window question,
+    # and arming this on it is how the English version started refusing three
+    # correct policy answers for not citing a credit gap they never needed.
+    r"|\bכמה\b.{0,20}\b(?:סמסטרים|סמסטר|שנים)\b"
+    r"|\bכמה זמן\b.{0,30}\b(?:נשאר|לסיים|לסיום|התואר|תואר)"
+    r"|\bמתי\b.{0,30}\b(?:אסיים|לסיים|סיום|מסיים)\b"
+    r"|\b(?:נשארו|נשאר)\b.{0,20}\b(?:סמסטרים|סמסטר)\b",
     re.IGNORECASE | re.DOTALL,
 )
 
