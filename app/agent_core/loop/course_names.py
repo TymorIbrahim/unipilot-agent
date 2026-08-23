@@ -32,6 +32,7 @@ a gap in the data rather than in this module.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import re
 from functools import lru_cache
@@ -118,8 +119,60 @@ def _name_index() -> dict[str, str]:
             continue
         name = _english_name(chunk.page_title or "")
         if name:
-            index[code] = name
+            index[code] = (name, _hebrew_name(chunk.page_title or ""))
     return index
+
+
+_HEBREW_HALF = re.compile(r"\(([^()]*[֐-׿][^()]*)\)\s*$")
+
+
+def _hebrew_name(title: str) -> str:
+    """The Hebrew half of a wiki title -- the trailing parenthesised group.
+
+    Kept beside the English name so the page can be CORROBORATED against the
+    catalog. It is not shown to anyone; it exists only to answer "is this wiki
+    page about the same course the catalog calls this code?"
+    """
+    found = _HEBREW_HALF.search(title or "")
+    return found.group(1).strip() if found else ""
+
+
+_STRIP = re.compile(r"[\s֑-ׇ\"'׳״()+.\-0-9]")
+
+
+def _same_course(wiki_english: str, wiki_hebrew: str, catalog_title: str) -> bool:
+    """Whether a wiki page and a catalog row describe the SAME course.
+
+    Measured, not assumed. Of 1752 codes carried by both sources, 1433 titles
+    match outright, 200 differ only in spelling (ניתוח / נתוח, עיקרי / עקרי),
+    and 119 -- 6.8% -- are different courses entirely:
+
+        02180006  wiki "Doctoral Dissertation in Education"
+                  catalog "שיח בכתת המתמטיקה והמדעים"
+
+    So the wiki's code -> page mapping cannot be trusted on its own, and
+    preferring it wholesale attached a wrong name to roughly one course in
+    fifteen. A live plan said "00940704 (Introduction to Data Engineering
+    (Advanced))" for a course the catalog, the planner and the transcript all
+    call סדנת תכנות בשפת סי.
+
+    The catalog is the authority -- it is what `plan_term`, the transcript and
+    every join in the system agree on -- so the wiki's ENGLISH name is used
+    only where the page corroborates it. Compared against BOTH halves, because
+    a catalog title is sometimes English itself ("Introduction to Human Factors
+    Engineering" against the wiki's "Human Factors Engineering").
+
+    0.6 is where the measured distribution separates: variant spellings of one
+    course sit above it, different courses below.
+    """
+    target = _STRIP.sub("", catalog_title or "")
+    if not target:
+        return True  # nothing to contradict it
+    best = max(
+        difflib.SequenceMatcher(None, _STRIP.sub("", candidate), target).ratio()
+        for candidate in (wiki_hebrew, wiki_english)
+    )
+    return best >= 0.6
 
 
 # code -> catalog title, loaded once at startup by `load_catalog_names`. The wiki
@@ -183,9 +236,18 @@ def course_display_name(value: str, hebrew: bool = False) -> str | None:
     """
     if not _COURSE_CODE.match(value or ""):
         return None
+    catalog = _catalog_names.get(value)
+    entry = _name_index().get(value)
+    english = None
+    if entry is not None:
+        name, hebrew_half = entry
+        # The wiki page must be about the same course the catalog names, or its
+        # English title is discarded -- see `_same_course`.
+        if catalog is None or _same_course(name, hebrew_half, catalog):
+            english = name
     if hebrew:
-        return _catalog_names.get(value) or _name_index().get(value)
-    return _name_index().get(value) or _catalog_names.get(value)
+        return catalog or english
+    return english or catalog
 
 
 def canonical_course_code(value: str) -> str:

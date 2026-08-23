@@ -129,3 +129,45 @@ class TestTheFallbackIsReadyIfItIsEverWired:
     def test_non_course_values_are_ignored_with_no_catalog_at_all(self) -> None:
         for value in ("85", "92.5", "2025-1", ""):
             assert course_display_name(value) is None
+
+
+class TestTheWikiNameMustBeAboutTheSameCourse:
+    """The wiki's code -> page mapping is wrong for about one course in fifteen.
+
+    Measured across the 1752 codes both sources carry: 1433 titles match, 200
+    differ only in spelling (ניתוח / נתוח, עיקרי / עקרי), and 119 -- 6.8% --
+    are different courses entirely. 02180006 is "Doctoral Dissertation in
+    Education" in the wiki and שיח בכתת המתמטיקה והמדעים in the catalog.
+
+    Preferring the wiki wholesale therefore attached a WRONG name to a real
+    code, which is the one outcome this module's docstring says is worse than
+    no name -- nothing about it invites doubt. A live plan rendered
+    "00940704 (Introduction to Data Engineering (Advanced))" for a course the
+    catalog, `plan_term` and the transcript all call סדנת תכנות בשפת סי.
+
+    The catalog is the authority because it is what every join in the system
+    agrees on; the wiki supplies English only where it corroborates.
+    """
+
+    def test_a_conflicting_wiki_page_is_discarded(self) -> None:
+        set_catalog_names({"00940704": "סדנת תכנות בשפת סי"})
+        assert course_display_name("00940704") == "סדנת תכנות בשפת סי"
+
+    def test_an_agreeing_wiki_page_supplies_the_english_name(self) -> None:
+        set_catalog_names({"00940224": "מבני נתונים ואלגוריתמים"})
+        assert course_display_name("00940224") == "Data Structures and Algorithms"
+
+    def test_a_spelling_variant_still_counts_as_the_same_course(self) -> None:
+        """ניתוח / נתוח is one course, and 200 codes differ only like this."""
+        set_catalog_names({"00140004": "נתוח מערכות"})
+        assert course_display_name("00140004") == "Systems Analysis"
+
+    def test_an_english_catalog_title_corroborates_too(self) -> None:
+        """A catalog title is sometimes English, so the Hebrew half alone
+        would score zero against it and reject a correct match."""
+        set_catalog_names({"00960620": "Introduction to Human Factors Engineering"})
+        assert course_display_name("00960620") == "Human Factors Engineering"
+
+    def test_with_no_catalog_row_the_wiki_stands_uncontradicted(self) -> None:
+        set_catalog_names({})
+        assert course_display_name("00940224") == "Data Structures and Algorithms"
