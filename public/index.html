@@ -560,6 +560,22 @@ function describePredicate(p) {
   return `${p.path} ${p.op ?? "="} ${shown}`;
 }
 
+/* An arithmetic expression, as arithmetic rather than as JSON.
+   {"ceil_div": [{"fact":"credits_needed"}, {"fact":"cap"}]}
+     -> ceil_div(credits_needed, cap) */
+const EXPR_OPS = { add: "+", subtract: "−", multiply: "×", divide: "÷" };
+function describeExpr(e) {
+  if (e === null || e === undefined) return "?";
+  if (typeof e !== "object") return JSON.stringify(e);
+  if ("fact" in e) return String(e.fact);
+  if ("value" in e) return JSON.stringify(e.value);
+  const [op, args] = Object.entries(e)[0] ?? [];
+  if (!op) return "?";
+  const parts = (Array.isArray(args) ? args : [args]).map(describeExpr);
+  const infix = EXPR_OPS[op];
+  return infix ? parts.join(` ${infix} `) : `${op}(${parts.join(", ")})`;
+}
+
 /* A call, said in one line. Falls back to the argument names, which is still
    more legible than the raw JSON and never lies about what was asked for. */
 function describeCall(call) {
@@ -572,12 +588,16 @@ function describeCall(call) {
     case "compute": {
       const pipes = Array.isArray(a.pipelines) ? a.pipelines : [];
       return pipes.map((p) => {
+        // A pipeline over held SCALARS carries `value` and no `source`, and is
+        // the common shape for the arithmetic questions -- ceil_div, subtract.
+        // Describing it as "over ?" said nothing and implied a missing source.
+        if (p.value && !p.source) return describeExpr(p.value);
         const stages = (p.stages || []).map((s) =>
           s.op === "aggregate" ? `${s.agg}(${s.field ?? ""})`
           : s.op === "filter" ? `filter ${describePredicate(s.predicate)}`
           : s.op ?? "?"
         ).join(" → ");
-        return `${stages} over ${p.source ?? "?"}`;
+        return `${stages || "pipeline"} over ${p.source ?? "?"}`;
       }).join("; ") || "pipeline";
     }
     case "search_corpus": return `"${a.query ?? ""}"${a.limit ? `, top ${a.limit}` : ""}`;
