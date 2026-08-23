@@ -44,6 +44,7 @@ from app.agent_core.facts.postconditions import (
     check_no_edge_identifiers,
     check_periods_are_whole,
     check_count_states_its_basis,
+    check_prereq_verdict_matches_the_edges,
     check_term_within_requested_cap,
     check_no_group_identifiers,
     check_no_join_side_labels,
@@ -127,6 +128,14 @@ def verify_answer(
     violations += check_alternatives_are_distinct(answer.text, question)
     violations += check_eligibility_is_not_self_contradictory(answer.text, question)
     violations += check_periods_are_whole(answer.text)
+    # Replays an eligibility verdict the answer ASSERTED. The grounding
+    # invariant refuses a typed digit, so "you need 25.5 credits" cannot be
+    # invented -- but "its prerequisites are not satisfied" carries no number
+    # and costs nothing to make up, and a live run told a student the chain
+    # stopped at a course they were eligible for that day.
+    violations += check_prereq_verdict_matches_the_edges(
+        answer.text, _satisfied_courses(facts)
+    )
 
     # Also on every answer, not only plan-shaped ones: "it will take you 2
     # semesters" needs its credits whether or not the reply slots a plan
@@ -399,6 +408,56 @@ __all__ = ["verify_answer"]
 
 _PASSED_SOURCES = ("passed_courses",)
 _COURSE_CODE_FIELDS = ("courseNumber", "course", "number", "code")
+
+
+_EDGE_SOURCES = ("prerequisite_edges",)
+
+
+def _satisfied_courses(facts: Mapping[str, HeldFact]) -> dict[str, str]:
+    """Courses whose prerequisites the HELD edges say are met, and what meets them.
+
+    Replays the group algebra the model is asked to do and sometimes skips: edges
+    sharing a `group` are ALTERNATIVES, so one passed member satisfies that group,
+    and a course is satisfied when every group it has is satisfied.
+
+    Read off the DERIVATION rather than the fact's name, exactly as
+    `_passed_codes` is and for the same reason -- the name is prose the model
+    wrote, and a collection of edges has been named after the wrong course.
+
+    Returns only courses that ARE satisfied. A course whose edges are incomplete
+    or absent is simply not in the map, so the check it feeds stays silent rather
+    than guessing -- the safe direction, since the failure being caught is an
+    over-confident NEGATIVE and a wrong positive here would be worse.
+    """
+    passed = set(_passed_codes(facts))
+    groups: dict[str, dict[str, set[str]]] = {}
+    for held in facts.values():
+        derivation = str(getattr(held, "derivation", "") or "")
+        if not any(source in derivation for source in _EDGE_SOURCES):
+            continue
+        for record in getattr(held.value, "records", None) or ():
+            course = record.fields.get("course")
+            requires = record.fields.get("requires")
+            if course is None or requires is None:
+                continue
+            group = record.fields.get("group")
+            label = str(group.value) if group is not None else str(course.value)
+            groups.setdefault(str(course.value), {}).setdefault(label, set()).add(
+                str(requires.value)
+            )
+
+    satisfied: dict[str, str] = {}
+    for course, by_group in groups.items():
+        witnesses = []
+        for members in by_group.values():
+            met = sorted(members & passed)
+            if not met:
+                witnesses = []
+                break
+            witnesses.append(met[0])
+        if witnesses:
+            satisfied[course] = ", ".join(witnesses)
+    return satisfied
 
 
 def _passed_codes(facts: Mapping[str, HeldFact]) -> list[str]:

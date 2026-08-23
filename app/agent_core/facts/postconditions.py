@@ -25,7 +25,7 @@ from __future__ import annotations
 import math
 import re
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 MIN_GRADE = 0.0
@@ -567,6 +567,70 @@ def check_term_within_cap(
             "the two came back under one label and a `select` on it merged them -- give each "
             "term a distinct name, and pass `max_credits` so the planner enforces the cap "
             "rather than leaving it to be noticed here.",
+        )
+    ]
+
+
+_PREREQ_UNMET_CLAIM = re.compile(
+    r"(?:prerequisites?|prereqs?)\b[^.;]{0,40}?\b(?:are|is|were|remain)?\s*"
+    r"(?:still\s+)?(?:not|un)[- ]?(?:yet\s+)?(?:satisfied|met|fulfilled|complete)"
+    r"|(?:not|n[o']t)\s+(?:yet\s+)?(?:satisfied|met)\b[^.;]{0,30}?"
+    r"\b(?:prerequisites?|prereqs?)\b",
+    re.IGNORECASE,
+)
+
+
+def check_prereq_verdict_matches_the_edges(
+    text: str, satisfied_courses: Mapping[str, str]
+) -> list[Violation]:
+    """An answer must not declare prerequisites unmet for a course that meets them.
+
+    Live, and wrong in the direction that costs a student a semester:
+
+        "Before you can take 00970135, you need to complete 00960324 first. I
+         also checked 00960324 itself, and its prerequisites are not yet
+         satisfied by your passed courses, so the chain stops there for now."
+
+    00960324 requires ANY ONE of 00940314 or 00980413, and the student passed
+    00940314 with a 57. They were eligible to register that day and were told
+    the chain stopped.
+
+    The run had already fetched both halves -- 00960324's edges and the passed
+    courses -- and then asserted the verdict in prose instead of computing it.
+    That is the hole this closes: the grounding invariant refuses a typed
+    DIGIT, so "you need 25.5 credits" cannot be invented, while "its
+    prerequisites are not satisfied" is words and costs nothing to make up. The
+    strongest guarantee in the system does not reach the claims that carry no
+    number, and an eligibility verdict is exactly such a claim.
+
+    `satisfied_courses` maps a course code to the passed course that satisfies
+    it, computed from the typed edges the run holds -- so this replays the
+    derivation the model skipped rather than trusting either side's prose.
+
+    Scoped to the code NEAREST BEFORE the claim, because an answer legitimately
+    naming two courses ("00970135 is blocked; 00960324 is not") would otherwise
+    be refused for the one it got right.
+    """
+    body = text or ""
+    claim = _PREREQ_UNMET_CLAIM.search(body)
+    if claim is None or not satisfied_courses:
+        return []
+    codes = _CODE.findall(body[: claim.start()])
+    if not codes:
+        return []
+    subject = codes[-1]
+    satisfied_by = satisfied_courses.get(subject)
+    if satisfied_by is None:
+        return []
+    return [
+        Violation(
+            "prereq_verdict_contradicts_the_edges",
+            f"the answer says {subject}'s prerequisites are not satisfied, and the edges you "
+            f"hold say they ARE -- {subject} needs any one of its group, and {satisfied_by} is "
+            "on the transcript. Do not assert an eligibility verdict you did not compute: "
+            "`distinct` the edges on `group`, `select` the ones whose `requires` is in "
+            f"passed_courses, `distinct` those on `group`, and compare the counts. Then say "
+            f"{subject} IS takeable and name {satisfied_by} as the reason.",
         )
     ]
 

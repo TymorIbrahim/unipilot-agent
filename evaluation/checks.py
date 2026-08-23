@@ -62,6 +62,11 @@ _AFFIRMS = re.compile(
     # the prompt asks for -- "To make it yes, pass 01040066" is "make it yes",
     # never "is yes".
     r"|\b(?:is|are|was|will\s+be)\s+yes\b"
+    # "…, and yes." -- the verdict appended to a preamble rather than leading.
+    # Scored "never affirms, and the data says yes" on an answer whose final
+    # word is yes. "and yes" is only ever a verdict; it is never a determiner
+    # the way a bare "yes" could follow other words.
+    r"|\band\s+yes\b"
     r"|\byou are eligible\b|\byou can take\b"
     r"|\b(?:you\s+)?(?:have\s+)?(?:meet|meets|met)\s+[1-9]\d*\s+of\b"
     # A projection affirms in the passive too: "next spring is forecast to
@@ -92,11 +97,30 @@ _NEGATIVE_CLAIMS = (
     r"\bdo ?n[o']?t meet\b",
     r"\bcannot (take|register)\b",
     r"\bcan ?n[o']?t (take|register)\b",
-    r"^\s*no[,.\s—-]",
+    # A leading verdict "No". The character class used to be `[,.\s—-]`, and the
+    # bare `\s` in it read "No more than 18 credits are allowed" -- a quantifier
+    # phrase, and usually part of an AFFIRMATIVE answer -- as a denial. "no" is
+    # a determiner as well as a verdict, so the verdict sense has to be asked
+    # for: punctuation after it, or a subject it could not be modifying.
+    r"^\s*no\b(?=\s*[,.;:!?—–-]|\s+(?:you|i|it|this|that|the\s+course)\b)",
     # A leading "No." was not enough. Live answer, scored FAIL while correct:
     #   "For 01040174, no -- you meet 0 of 1 prerequisite groups."
     # The denial is real and mid-sentence, because the model led with the course.
     r"[,;:]\s*no\b\s*[—–-]",
+    # ...and neither was that. `_AFFIRMS` reads "Eligible: yes" through its
+    # `(?:^|[:.\-—–]\s*)yes\b` clause, but the denial side only accepted a
+    # colon when a DASH followed it, so this scored "never states the negative"
+    # while opening with the negative:
+    #   "Eligibility: no. The course exists in the catalog. It requires any one
+    #    of 01040066, 01040166, and you have passed neither."
+    # The asymmetry is why it survived: nobody writes the same sentence twice.
+    #
+    # "no" cannot be matched as loosely as "yes", because it is also a
+    # determiner -- "No prerequisites are outstanding" is an AFFIRMATION, and a
+    # bare `[:.]\s*no\b` reads it as a denial. So the verdict sense is
+    # required explicitly: a "no" that ends the clause rather than modifying a
+    # noun.
+    r"(?:^|[:.\-—–]\s*)no\b(?=\s*[.,;:!?—–-]|\s*$)",
     r"\bso,?\s*no\b",
     # Domain-specific and unambiguous: this phrasing IS the refusal, and the
     # count is what makes it one. It survives every rewording of the prose
