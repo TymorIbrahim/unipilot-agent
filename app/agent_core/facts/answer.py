@@ -583,6 +583,13 @@ def _render(
     if modifier == "list" or modifier is None:
         rendered = [_readable_field(record, hebrew) for record in value.records]
         rendered = [text for text in rendered if text]
+        # DEDUPED, first occurrence wins. A search hit list holds one record per
+        # PASSAGE, and several passages come from one page, so the readable
+        # field repeats: a live Hebrew refusal listed "Undergraduate Study
+        # Regulations (Technion)" twelve times in one sentence. Repeating a name
+        # says nothing the first mention did not, and the honest count is still
+        # available as `{name:count}`.
+        rendered = list(dict.fromkeys(rendered))
         if not rendered:
             return "(none)"
         # A slot holding a large collection dumped every record into the prose --

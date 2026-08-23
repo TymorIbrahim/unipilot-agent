@@ -323,3 +323,73 @@ class TestTheCatalogDenialIsAboutTheCatalog:
             "הקורס לא קיים בקטלוג.",
         ):
             assert self.kinds(text) == [], text
+
+
+class TestNoRankingByAGradeNobodyHasEarned:
+    """Live, asked "which courses next semester would raise my GPA the most?":
+
+        "These are the courses next semester that would raise your GPA the most:
+         - course 00960620 · credits 3.5
+         - course 00960606 · credits 3
+         - course 00970325 · credits 3 ..."
+
+    The course list sorted by CREDITS, presented as a GPA-impact ranking. GPA
+    impact is grade x credits and the grade is not a record -- it does not exist
+    yet for any of them. The agent took the one field it had, ordered by it, and
+    labelled the result something else.
+
+    Every other gate passes it, which is why it needs its own: the credits are
+    real derived facts, no digit was typed, no course was invented. Only the
+    CLAIM ABOUT WHAT THE ORDERING MEANS is fabricated, and nothing else examines
+    a claim carrying no number of its own.
+
+    Worse than a wrong number because it is actionable -- a student reads the
+    top of that list and registers, believing it was computed. The ground truth
+    for this question says so outright: "inventing a ranking here would be the
+    worst outcome".
+    """
+
+    ASKED = "Which courses next semester would raise my GPA the most?"
+    SHIPPED = (
+        "These are the courses next semester that would raise your GPA the most:\n"
+        "- course 00960620 · credits 3.5\n- course 00960606 · credits 3\n"
+        "- course 00970325 · credits 3"
+    )
+
+    def kinds(self, text: str, question: str) -> list[str]:
+        from app.agent_core.facts.postconditions import (
+            check_no_ranking_by_an_unearned_grade as check,
+        )
+
+        return [v.kind for v in check(text, question)]
+
+    def test_the_invented_ranking_is_refused(self) -> None:
+        assert self.kinds(self.SHIPPED, self.ASKED) == ["ranked_by_an_unearned_grade"]
+
+    def test_saying_it_cannot_be_derived_passes(self) -> None:
+        """The correct answer, and offering what CAN be done alongside it is
+        encouraged rather than penalised."""
+        honest = (
+            "I can't work that out: raising a GPA depends on the grade you earn, and "
+            "no grade exists yet for a course you have not taken. What I can tell you "
+            "is that credits weight a grade's effect — 00960620 is 3.5 credits, "
+            "00940704 is 1.5."
+        )
+        assert self.kinds(honest, self.ASKED) == []
+
+    def test_a_hebrew_disclaimer_passes(self) -> None:
+        assert self.kinds(
+            "אי אפשר לגזור את זה: ההשפעה תלויה בציון שתקבל. 00960620, 00940704.",
+            "איזה קורסים יעלו לי הכי הרבה את הממוצע?",
+        ) == []
+
+    def test_other_questions_are_untouched(self) -> None:
+        for question, answer in (
+            ("Plan my winter semester.", self.SHIPPED),
+            ("What is my GPA?", "Your GPA is 74.45."),
+            ("Which three courses did I do worst in?", "01030015, 03240053, 01040166."),
+        ):
+            assert self.kinds(answer, question) == [], question
+
+    def test_one_course_is_not_an_ordering(self) -> None:
+        assert self.kinds("Consider 00960620.", self.ASKED) == []

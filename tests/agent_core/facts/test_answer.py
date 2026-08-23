@@ -753,3 +753,42 @@ class TestATableMustNotSitInsideASentence:
         )
         assert isinstance(result, Ungrounded)
         assert "project" in result.reason and "compute" in result.reason
+
+
+class TestARepeatedNameIsSaidOnce:
+    """A search-hit list holds one record per PASSAGE, and several passages come
+    from one page, so the readable field repeats. A live Hebrew refusal listed
+    "Undergraduate Study Regulations (Technion)" twelve times in one sentence.
+
+    Repeating a name says nothing the first mention did not, and the honest
+    count is still available as `{name:count}` -- so deduping the LIST render
+    loses no information a reader could use.
+    """
+
+    def hits(self, *titles: str) -> Collection:
+        return Collection(
+            records=tuple(
+                Record(fields={"title": Scalar(ScalarKind.TEXT, t)}, basis=Basis.WIKI_DERIVED)
+                for t in titles
+            ),
+            completeness=Completeness(complete=True, total=len(titles)),
+        )
+
+    def test_duplicates_collapse_in_a_list(self) -> None:
+        fact = self.hits("Regulations", "Regulations", "Discipline", "Regulations")
+        result = resolve_answer("I read {h}.", {"h": _held(fact, Basis.WIKI_DERIVED)})
+        assert isinstance(result, Answer)
+        assert result.text == "I read Regulations, Discipline."
+
+    def test_first_occurrence_wins_so_order_is_kept(self) -> None:
+        fact = self.hits("B", "A", "B", "C")
+        result = resolve_answer("{h}", {"h": _held(fact, Basis.WIKI_DERIVED)})
+        assert isinstance(result, Answer)
+        assert result.text == "B, A, C"
+
+    def test_the_count_still_reports_every_record(self) -> None:
+        """Deduping the names must not quietly change the number searched."""
+        fact = self.hits("Regulations", "Regulations", "Discipline")
+        result = resolve_answer("{h:count} passages", {"h": _held(fact, Basis.WIKI_DERIVED)})
+        assert isinstance(result, Answer)
+        assert result.text == "3 passages"

@@ -760,6 +760,72 @@ _NEGATED_ZERO = re.compile(
 )
 
 
+_ASKS_GPA_RANKING = re.compile(
+    r"(?:which|what)\b[^.?]{0,60}?\b(?:raise|rais|improve|boost|increase|help|lift)\w*\b"
+    r"[^.?]{0,25}?\b(?:gpa|average|grade point)\b"
+    r"|\b(?:gpa|average)\b[^.?]{0,30}?\b(?:the most|most|best|highest)\b"
+    r"|\b(?:best|better)\b[^.?]{0,25}?\bfor my (?:gpa|average)\b"
+    r"|\bאיזה\b[^.?]{0,40}?\b(?:יעלה|ישפר|ירים)\b[^.?]{0,25}?\bממוצע"
+    r"|\bממוצע\b[^.?]{0,30}?\bהכי\b",
+    re.IGNORECASE,
+)
+_DISCLAIMS_THE_FUTURE = re.compile(
+    r"\bcan ?n[o']?t\b|\bcannot\b|\bunable\b|\bno way to\b|\bnot (?:possible|derivable|"
+    r"something I can|able)\b|\bdepends on\b[^.]{0,40}\bgrade\b|\bwithout knowing\b"
+    r"|\bfuture grade\b|\bnot a record\b|\bhave not been earned\b|\bhaven[’']?t been earned\b"
+    r"|\bאי אפשר\b|\bלא ניתן\b|\bתלוי ב\b[^.]{0,30}\bציון\b|\bאיני יכול\b",
+    re.IGNORECASE,
+)
+
+
+def check_no_ranking_by_an_unearned_grade(text: str, question: str = "") -> list[Violation]:
+    """Courses cannot be ordered by a grade the student has not earned yet.
+
+    Live, asked "which courses next semester would raise my GPA the most?":
+
+        "These are the courses next semester that would raise your GPA the most:
+         - course 00960620 · credits 3.5
+         - course 00960606 · credits 3
+         - course 00970325 · credits 3
+         ..."
+
+    That is the course list sorted by CREDITS, presented as a GPA-impact
+    ranking. GPA impact is grade times credits, and the grade is not a record --
+    it does not exist yet for any of them. The agent took the one field it had,
+    ordered by it, and labelled the result something else.
+
+    Every other gate passes it, which is why it needs its own. The credits are
+    real derived facts. No digit was typed. No course was invented. Only the
+    CLAIM ABOUT WHAT THE ORDERING MEANS is fabricated, and nothing else here
+    examines a claim that carries no number of its own.
+
+    Worse than a wrong number, because it is actionable: a student reads the top
+    of that list and registers, believing it was computed.
+
+    An answer that says plainly it cannot be derived passes -- that is the
+    correct response, and offering what CAN be done (the credit weighting, a
+    plan) alongside it is encouraged rather than penalised.
+    """
+    if not _ASKS_GPA_RANKING.search(question or ""):
+        return []
+    body = text or ""
+    if _DISCLAIMS_THE_FUTURE.search(body):
+        return []
+    if len(set(_CODE.findall(body))) < 2:
+        return []  # not presenting an ordering of courses
+    return [
+        Violation(
+            "ranked_by_an_unearned_grade",
+            "the answer orders courses by how much they would raise the GPA, and no fact you "
+            "hold can support that order: GPA impact is grade x credits, and the grade does "
+            "not exist yet for a course not taken. Sorting by credits and calling it GPA "
+            "impact is the ranking invented. Say plainly that it cannot be derived from the "
+            "record, then offer what CAN be: that credits weight a grade's effect, or a plan "
+            "for the term.",
+        )
+    ]
+
+
 def check_a_zero_count_is_not_also_negated(text: str) -> list[Violation]:
     """A count of zero IS the negative. Negating it says the opposite.
 
