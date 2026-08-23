@@ -574,6 +574,7 @@ function parseDecision(response) {
   if (!obj || typeof obj !== "object") return { kind: "text", text: String(response ?? "") };
   if (Array.isArray(obj.calls)) return { kind: "calls", calls: obj.calls };
   if (typeof obj.answer === "string") return { kind: "answer", answer: obj.answer };
+  if (typeof obj.decline === "string") return { kind: "decline", decline: obj.decline };
   return { kind: "text", text: JSON.stringify(obj, null, 2) };
 }
 
@@ -661,6 +662,8 @@ function renderTurns(loopSteps) {
     } else if (decision.kind === "answer") {
       act.appendChild(el("span", "verb", "Answered"));
       act.appendChild(document.createTextNode(" — enough facts held to fill every slot"));
+    } else if (decision.kind === "decline") {
+      act.appendChild(el("span", "verb", "Declined"));
     } else {
       act.appendChild(el("span", "verb", "Replied"));
     }
@@ -677,9 +680,9 @@ function renderTurns(loopSteps) {
         list.appendChild(row);
       }
       box.appendChild(list);
-    } else if (decision.kind === "answer") {
+    } else if (decision.kind === "decline" || decision.kind === "answer") {
       const list = el("div", "calls");
-      const line = el("div", "call", decision.answer);
+      const line = el("div", "call", decision.answer ?? decision.decline);
       line.dir = "auto";
       list.appendChild(line);
       box.appendChild(list);
@@ -814,6 +817,7 @@ function describeStep(step) {
     return unique.length ? unique.join(", ") : `${d.calls.length} calls`;
   }
   if (d.kind === "answer") return "answered";
+  if (d.kind === "decline") return "declined";
   const text = String(d.text ?? "").trim();
   return text ? text.slice(0, 40) : "";
 }
