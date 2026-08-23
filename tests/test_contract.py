@@ -66,9 +66,17 @@ def test_team_info_lists_every_member_with_a_real_address(client: TestClient) ->
     """Placeholders here ship straight into the graded identity endpoint."""
     students = client.get("/api/team_info").json()["students"]
 
-    assert len(students) == 2
+    from app.team import STUDENTS
+
+    # Compared against the roster SOURCE rather than a hand-maintained count.
+    # The literal `2` here had to be edited to add a third member, which makes
+    # the test a step in a checklist instead of a check -- and a checklist step
+    # is exactly what gets skipped.
+    assert len(students) == len(STUDENTS)
+    assert students == [dict(student) for student in STUDENTS]
     assert all("@" in student["email"] and "TODO" not in student["email"] for student in students)
     assert all(student["name"] and "TODO" not in student["name"] for student in students)
+    assert len({student["email"] for student in students}) == len(students)
 
 
 def test_agent_info_has_the_required_fields(client: TestClient) -> None:

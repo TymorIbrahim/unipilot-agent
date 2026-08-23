@@ -19,6 +19,7 @@ TEAM_NAME = "UniPilot"
 STUDENTS: tuple[dict[str, str], ...] = (
     {"name": "Tymor Ibrahim", "email": "tymoribrahim@campus.technion.ac.il"},
     {"name": "Kinan Ibrahim", "email": "kinani@campus.technion.ac.il"},
+    {"name": "Ronza Hnout", "email": "ronza.hnout@campus.technion.ac.il"},
 )
 
 
