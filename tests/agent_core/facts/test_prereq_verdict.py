@@ -171,3 +171,64 @@ class TestItDoesNotRefuseCorrectAnswers:
         assert check_prereq_verdict_matches_the_edges(
             text, _satisfied_courses(REAL_FACTS)
         ) == []
+
+
+class TestTheCatalogLookupIsNotTheAnswer:
+    """A successful existence check is not news, and it crowds out the verdict.
+
+    Two live answers to "will 00940412 be offered next spring?":
+
+        "00940412 exists in the catalog, and yes."
+        "Yes -- it exists in the catalog, and yes."
+
+    The student typed the course number, so they know it exists. The verdict is
+    the last word of both. The second is also why `_tidy_affirmations` could not
+    repair the doubled yes: that repair spans separators, and here a whole
+    clause sits between the two.
+
+    Asked for in the prompt first, in the same voice as the rules that do hold,
+    and the next runs narrated anyway.
+    """
+
+    def kinds(self, text: str) -> list[str]:
+        from app.agent_core.facts.postconditions import (
+            check_answer_does_not_narrate_the_catalog_lookup as check,
+        )
+
+        return [v.kind for v in check(text)]
+
+    def test_the_two_live_answers_are_refused(self) -> None:
+        for text in (
+            "00940412 exists in the catalog, and yes.",
+            "Yes -- it exists in the catalog, and yes.",
+        ):
+            assert self.kinds(text) == ["narrates_the_catalog_lookup"], text
+
+    def test_a_failed_lookup_survives(self) -> None:
+        """Existence IS the answer here, and reasoning past an empty lookup is
+        how a course that does not exist got a confident eligibility verdict."""
+        for text in (
+            "00999999 is not in the catalog, so I cannot say anything about it.",
+            "That course number does not exist in the catalog.",
+            "I could not find 00999999 in the catalog.",
+        ):
+            assert self.kinds(text) == [], text
+
+    def test_an_ordinary_answer_is_untouched(self) -> None:
+        for text in (
+            "Yes -- it has run every spring on record.",
+            "You need 25.5 more credits.",
+        ):
+            assert self.kinds(text) == [], text
+
+    def test_it_reaches_through_verify_answer(self) -> None:
+        from app.agent_core.facts.answer_verify import verify_answer
+
+        answer = Answer(
+            text="00940412 exists in the catalog, and yes.",
+            basis=Basis.OFFICIAL_RECORD,
+            used=(),
+            citations=(),
+        )
+        kinds = [v.kind for v in verify_answer(answer, {}, "")]
+        assert "narrates_the_catalog_lookup" in kinds

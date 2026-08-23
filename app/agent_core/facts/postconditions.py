@@ -571,6 +571,60 @@ def check_term_within_cap(
     ]
 
 
+_NARRATES_CATALOG = re.compile(
+    r"\b(?:it|the course|this course|\d{6,8})\s+"
+    r"(?:exists?|is\s+(?:present|listed|found))\s+(?:in|on)\s+the\s+catalog"
+    r"|\bexists?\s+in\s+the\s+catalog\b"
+    r"|\b(?:is|are)\s+in\s+the\s+catalog\b"
+    r"|\bfound\s+(?:it\s+)?in\s+the\s+catalog\b",
+    re.IGNORECASE,
+)
+_DENIES_CATALOG = re.compile(
+    r"\b(?:not|n[o']t|no)\b[^.;]{0,30}?\bcatalog\b"
+    r"|\bcatalog\b[^.;]{0,30}?\b(?:not|n[o']t)\b",
+    re.IGNORECASE,
+)
+
+
+def check_answer_does_not_narrate_the_catalog_lookup(text: str) -> list[Violation]:
+    """A successful existence check is not news, and it is crowding out the answer.
+
+    The prompt tells the model to confirm a named course exists before reasoning
+    about it, and the model reports having done so. Two live answers to "will
+    00940412 be offered next spring?":
+
+        "00940412 exists in the catalog, and yes."
+        "Yes -- it exists in the catalog, and yes."
+
+    The student typed the course number, so they know it exists; the verdict is
+    the last word of both, and the second is also why `_tidy_affirmations` could
+    not repair the doubled yes -- that repair only spans separators, and here a
+    whole clause sits between the two.
+
+    Only the AFFIRMATIVE narration is refused. "00999999 is not in the catalog"
+    is the case where existence IS the answer, and it must survive: reasoning on
+    past an empty lookup is how a course that does not exist got a confident
+    eligibility verdict.
+
+    Asking in the prompt did not work -- it was added in the same voice as the
+    rules that do hold and the next runs narrated anyway -- which is the whole
+    reason this file exists.
+    """
+    body = text or ""
+    if not _NARRATES_CATALOG.search(body) or _DENIES_CATALOG.search(body):
+        return []
+    return [
+        Violation(
+            "narrates_the_catalog_lookup",
+            "the answer reports that the course exists in the catalog. The student named it, "
+            "so that is not news -- and it is standing where the answer should be. Confirming "
+            "existence is a precondition for your REASONING, not a sentence in the reply. Lead "
+            "with the verdict and follow it with the basis you derived; mention the catalog "
+            "only when the lookup FAILED, because then it is the answer.",
+        )
+    ]
+
+
 _PREREQ_UNMET_CLAIM = re.compile(
     r"(?:prerequisites?|prereqs?)\b[^.;]{0,40}?\b(?:are|is|were|remain)?\s*"
     r"(?:still\s+)?(?:not|un)[- ]?(?:yet\s+)?(?:satisfied|met|fulfilled|complete)"
