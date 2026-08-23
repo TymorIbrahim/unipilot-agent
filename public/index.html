@@ -183,23 +183,50 @@
      ("and the one after that?") reads as the follow-up it is */
   .thread { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
   .exchange {
-    border-left: 2px solid var(--line); padding-left: 14px;
-    display: flex; flex-direction: column; gap: 5px;
+    border-left: 2px solid var(--line); padding-left: 16px;
+    display: flex; flex-direction: column; gap: 7px;
   }
   .exchange .q {
-    font-size: 13.5px; font-weight: 650; color: var(--muted);
+    font-size: 14px; font-weight: 700; color: var(--muted);
   }
-  .exchange .a {
-    font-size: 14px; color: var(--muted); white-space: pre-wrap;
-    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-    overflow: hidden;
+  .exchange .q::before {
+    content: "You asked"; display: block; font-size: 10px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
+    margin-bottom: 3px;
   }
+  /* NOT clamped. The previous version cut each answer to four lines, which
+     made a plan unreadable -- and the whole point of showing an earlier turn
+     is so the reader can see what "that" in the follow-up refers to. */
+  .exchange .a { font-size: 14.5px; color: var(--ink); white-space: pre-wrap; }
   .exchange.err .a { color: var(--err); }
   .threadline {
     font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--faint); margin-bottom: 10px;
   }
-  .now { font-size: 13.5px; font-weight: 650; color: var(--ink); margin-bottom: 8px; }
+  .now { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .now::before {
+    content: "You asked"; display: block; font-size: 10px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--faint);
+    margin-bottom: 3px;
+  }
+  .latest {
+    border-left: 2px solid var(--accent); padding-left: 16px;
+  }
+
+  /* Said BEFORE you type, because an affordance that only appears after you
+     have used the feature cannot tell you the feature exists. */
+  .continuing {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    margin-top: 12px; padding: 9px 13px; border-radius: 10px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 12.5px; line-height: 1.5;
+  }
+  .continuing .ct-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto;
+  }
+  .continuing .ghost {
+    margin-left: auto; color: var(--accent); border-color: currentColor;
+  }
 
   /* the grounding proof */
   .grounding { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); }
@@ -368,6 +395,12 @@
     <textarea id="prompt" rows="3"
       placeholder="Which courses should I take next semester, and how many credits do I still need?"></textarea>
     <div class="examples" id="examples"></div>
+    <div class="continuing" id="continuing" hidden>
+      <span class="ct-dot"></span>
+      <span>Continuing this conversation — the agent can see <b id="ct-count">0</b> earlier
+        exchange<span id="ct-plural"></span>, so "that" and "it" will resolve.</span>
+      <button class="ghost" id="reset">Start new</button>
+    </div>
     <div class="controls">
       <div class="field">
         <label for="student">Student record</label>
@@ -384,7 +417,6 @@
     <div class="card-head">
       <h2>Answer</h2>
       <button class="ghost" id="copy" hidden>Copy</button>
-      <button class="ghost" id="reset" hidden>New conversation</button>
       <span class="status" id="status" hidden></span>
     </div>
     <div class="card-body">
@@ -884,16 +916,22 @@ let LAST = null;   // the exchange on screen, not yet archived
 function renderThread() {
   const host = $("thread");
   host.innerHTML = "";
-  if (!THREAD.length) { host.hidden = true; $("reset").hidden = true; return; }
+  const strip = $("continuing");
+  if (!THREAD.length) { host.hidden = true; strip.hidden = true; return; }
+
+  // The affordance, stated where it can still change what you type.
+  strip.hidden = false;
+  $("ct-count").textContent = String(THREAD.length);
+  $("ct-plural").textContent = THREAD.length === 1 ? "" : "s";
+
   host.hidden = false;
-  $("reset").hidden = false;
   host.className = "thread";
-  host.appendChild(el("div", "threadline", `Earlier in this conversation`));
+  host.appendChild(el("div", "threadline", "Earlier in this conversation"));
   for (const turn of THREAD) {
     const box = el("div", `exchange${turn.ok ? "" : " err"}`);
     const q = el("div", "q", turn.q);
     q.dir = "auto";
-    const a = el("div", "a", turn.a);
+    const a = el("div", "a", turn.a);   // full length -- see the CSS note
     a.dir = "auto";
     box.appendChild(q);
     box.appendChild(a);
@@ -902,6 +940,9 @@ function renderThread() {
 }
 
 function newConversation() {
+  // Drops the browser's transcript AND the id the server threads on, so the
+  // next question starts a genuinely fresh conversation rather than one that
+  // merely looks fresh.
   THREAD = [];
   try { sessionStorage.removeItem(`unipilot-thread:${selectEl.value || "default"}`); } catch {}
   renderThread();
@@ -910,6 +951,7 @@ function newConversation() {
 function showAnswer(text, isError, question) {
   const slot = $("answer-slot");
   slot.innerHTML = "";
+  if (question) slot.className = "latest"; else slot.className = "";
   if (question) {
     const q = el("div", "now", question);
     q.dir = "auto";
@@ -1013,7 +1055,12 @@ async function run() {
 $("reset").addEventListener("click", () => { newConversation(); });
 // The server keys history on `student:thread`, so changing student is a
 // different conversation and the visible one would be someone else's.
-selectEl.addEventListener("change", () => { LAST = null; newConversation(); });
+selectEl.addEventListener("change", () => {
+  // A different student is a different thread server-side, so continuing would
+  // show one student's question above another's answer.
+  LAST = null;
+  newConversation();
+});
 $("run").addEventListener("click", run);
 $("prompt").addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
